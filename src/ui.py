@@ -209,7 +209,7 @@ def render_ui(user_info: dict):
         st.header("📤 Carga Masiva de Productos (Paso 1)")
         
         st.markdown("### 1. Descargar Plantilla Modelo")
-        st.caption("Descarga la planilla oficial para que el bodeguero complete los datos de pronto vencimiento.")
+        st.caption("Descarga la planilla oficial formateada para que el bodeguero complete los datos de pronto vencimiento.")
         
         df_plantilla = pd.DataFrame([{
             "BODEGA ORIGEN": "Bodega AZ09 (Fármacos)",
@@ -227,10 +227,42 @@ def render_ui(user_info: dict):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_plantilla.to_excel(writer, index=False, sheet_name='Plantilla_Carga')
+            ws = writer.sheets['Plantilla_Carga']
+
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+
+            header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+            header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+            thin_border = Border(
+                left=Side(style='thin', color='D9D9D9'),
+                right=Side(style='thin', color='D9D9D9'),
+                top=Side(style='thin', color='D9D9D9'),
+                bottom=Side(style='thin', color='D9D9D9')
+            )
+
+            ws.row_dimensions[1].height = 28
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = header_alignment
+
+            for col in ws.columns:
+                max_len = 0
+                col_letter = get_column_letter(col[0].column)
+                for cell in col:
+                    cell.border = thin_border
+                    val_str = str(cell.value or '')
+                    if len(val_str) > max_len:
+                        max_len = len(val_str)
+                ws.column_dimensions[col_letter].width = max(max_len + 5, 18)
+
         excel_data = output.getvalue()
 
         st.download_button(
-            label="📥 Descargar Plantilla Excel (.xlsx)",
+            label="📥 Descargar Plantilla Excel Formateada (.xlsx)",
             data=excel_data,
             file_name="Plantilla_Carga_Masiva_Bodega.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
