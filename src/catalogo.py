@@ -43,7 +43,6 @@ ENCABEZADOS_ESPERADOS = {"CODIGO REYIMEN", "CÓDIGO REYIMEN"}
 # Listas oficiales
 # ---------------------------------------------------------------------------
 BODEGAS_OFICIALES = [
-    "Bodega de excluidos",
     "Bodega BZ02 (Insumos clínicos)",
     "Bodega CS08 (Insumos clínicos)",
     "Bodega CZ69 (Insumos clínicos)",
@@ -51,6 +50,7 @@ BODEGAS_OFICIALES = [
     "Bodega AZ10 (Fármacos)",
     "Bodega AZ09 (Fármacos)",
     "Bodega BZ03 (Sueros)",
+    "Farmacia"
 ]
 
 TIPOS_DOCUMENTO = ["Factura", "Guía de despacho"]
