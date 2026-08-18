@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard y Consolidado General.
+Gestión de Usuarios, Dashboard, Consolidado General y Personalización de Tema.
 """
 import io
 import streamlit as st
@@ -41,9 +41,50 @@ OPCIONES_REDISTRIBUCION_STOCK = [
     "Consulta de compra"
 ]
 
+# Colores de fondo personalizados
+TEMAS_COLOR = {
+    "Oscuro (Predeterminado)": {"bg": "#0e1117", "card": "#262730", "text": "#ffffff"},
+    "Azul": {"bg": "#102a43", "card": "#183b56", "text": "#f0f4f8"},
+    "Rojo": {"bg": "#3d0c11", "card": "#5c131a", "text": "#fff5f5"},
+    "Amarillo": {"bg": "#3a3000", "card": "#544600", "text": "#fffbea"},
+    "Violeta": {"bg": "#231123", "card": "#381a38", "text": "#f7f0f7"},
+    "Verde": {"bg": "#0f2f1d", "card": "#1a472a", "text": "#f0fff4"},
+    "Rosado": {"bg": "#3b1225", "card": "#541b36", "text": "#fff0f5"}
+}
+
+def aplicar_estilo_tema(nombre_tema):
+    tema = TEMAS_COLOR.get(nombre_tema, TEMAS_COLOR["Oscuro (Predeterminado)"])
+    css = f"""
+    <style>
+        .stApp {{
+            background-color: {tema['bg']} !important;
+            color: {tema['text']} !important;
+        }}
+        [data-testid="stSidebar"] {{
+            background-color: {tema['card']} !important;
+        }}
+        .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label {{
+            color: {tema['text']} !important;
+        }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
 def render_ui(user_info: dict):
+    # Selector de tema en la barra lateral
+    if "tema_seleccionado" not in st.session_state:
+        st.session_state["tema_seleccionado"] = "Oscuro (Predeterminado)"
+
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
+    
+    tema_sel = st.sidebar.selectbox(
+        "🎨 Color de Fondo", 
+        list(TEMAS_COLOR.keys()),
+        index=list(TEMAS_COLOR.keys()).index(st.session_state["tema_seleccionado"])
+    )
+    st.session_state["tema_seleccionado"] = tema_sel
+    aplicar_estilo_tema(tema_sel)
     
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["logged_in"] = False
