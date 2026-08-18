@@ -1,5 +1,5 @@
 """
-Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Gestión de Usuarios y Dashboard de Análisis.
+Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Gestión de Usuarios, Dashboard y Consolidado General.
 """
 import streamlit as st
 import pandas as pd
@@ -64,6 +64,7 @@ def render_ui(user_info: dict):
         tabs_disponibles.append("Paso 5: Resolución/Cierre")
     
     tabs_disponibles.append("Histórico Concluidos")
+    tabs_disponibles.append("🔍 Consolidado General")
     tabs_disponibles.append("📊 Dashboard / Análisis")
     
     if rol == "admin":
@@ -505,7 +506,70 @@ def render_ui(user_info: dict):
         df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
         st.dataframe(df, hide_index=True, use_container_width=True)
 
-    # --- NUEVA PESTAÑA: DASHBOARD / ANÁLISIS ---
+    # --- NUEVA PESTAÑA: CONSOLIDADO GENERAL DE PRODUCTOS Y ESTADOS ---
+    elif tab_seleccionada == "🔍 Consolidado General":
+        st.header("🔍 Consolidado General de Todos los Productos")
+        
+        df_cons = pd.read_sql_query("SELECT * FROM productos", conn)
+        
+        if df_cons.empty:
+            st.info("No hay productos registrados en el sistema.")
+        else:
+            # Mapeo intuitivo de estado del producto según su paso
+            def determinar_estado_general(row):
+                if row['estado_global'] == 'Concluido':
+                    return f"Concluido ({row['estado_final'] or 'Archivado'})"
+                
+                paso = row['paso_actual']
+                if paso == 1:
+                    return "Paso 1: Nuevo / Pendiente Jefatura"
+                elif paso == 2:
+                    return f"Paso 2: Canje Jefatura ({row['estado_canje'] or 'En evaluación'})"
+                elif paso == 3:
+                    return f"Paso 3: Trámite Proveedor ({row['tramite_proveedor'] or 'En gestión'})"
+                elif paso == 4:
+                    return "Paso 4: Bulto Asignado / Pendiente Cierre"
+                else:
+                    return "En trámite"
+
+            df_cons['Estado Actual del Producto'] = df_cons.apply(determinar_estado_general, axis=1)
+
+            # Filtros dinámicos
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                search_text = st.text_input("🔎 Buscar por Descripción, Código Reyimen o Lote")
+            with col_f2:
+                estado_filtro = st.selectbox(
+                    "Filtrar por Estado Global", 
+                    ["Todos", "En trámite", "Concluido"]
+                )
+
+            # Aplicar filtros
+            if estado_filtro != "Todos":
+                df_cons = df_cons[df_cons['estado_global'] == estado_filtro]
+                
+            if search_text:
+                mask = (
+                    df_cons['descripcion'].str.contains(search_text, case=False, na=False) |
+                    df_cons['codigo_reyimen'].str.contains(search_text, case=False, na=False) |
+                    df_cons['lote'].str.contains(search_text, case=False, na=False)
+                )
+                df_cons = df_cons[mask]
+
+            # Formatear tabla para mostrar
+            df_mostrar = df_cons[[
+                'id', 'codigo_reyimen', 'descripcion', 'bodega_origen', 
+                'cantidad', 'lote', 'vencimiento', 'Estado Actual del Producto', 'proveedor'
+            ]].copy()
+
+            df_mostrar.columns = [
+                'ID', 'Código Reyimen', 'Descripción', 'Bodega Origen', 
+                'Cantidad', 'Lote', 'Vencimiento', 'Estado Actual', 'Proveedor'
+            ]
+
+            st.dataframe(df_mostrar, hide_index=True, use_container_width=True)
+
+    # --- DASHBOARD / ANÁLISIS ---
     elif tab_seleccionada == "📊 Dashboard / Análisis":
         st.header("📊 Dashboard Gerencial y Análisis de Datos")
         
@@ -514,12 +578,10 @@ def render_ui(user_info: dict):
         if df_all.empty:
             st.info("No hay datos suficientes para generar análisis.")
         else:
-            # 1. Métricas Principales (KPIs)
             tot_reg = len(df_all)
             concluidos = len(df_all[df_all['estado_global'] == 'Concluido'])
             tramite = len(df_all[df_all['estado_global'] == 'En trámite'])
             
-            # Unidades rescatadas/canjeadas
             canjeados_df = df_all[df_all['estado_final'] == 'Canjeado']
             unidades_canjeadas = canjeados_df['cantidad'].sum() if not canjeados_df.empty else 0
             
@@ -531,7 +593,6 @@ def render_ui(user_info: dict):
             
             st.divider()
 
-            # 2. Tablas y Desgloses por Criterios
             col_d1, col_d2 = st.columns(2)
             
             with col_d1:
