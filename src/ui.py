@@ -44,13 +44,12 @@ def render_ui(user_info: dict):
     
     conn = get_connection()
 
-    # --- PASO 1 (REACTIVO + MOTIVO + TIPO DE COMPRA: CENABAST / COMPRA PROPIA) ---
+    # --- PASO 1 (REACTIVO + MOTIVO + TIPO DE COMPRA) ---
     if tab_seleccionada == "Paso 1: Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
         
-        # Buscador en la parte superior fuera del formulario
         c_busq1, c_busq2 = st.columns(2)
         with c_busq1:
             bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES)
@@ -110,16 +109,28 @@ def render_ui(user_info: dict):
             else:
                 st.error(msg)
 
-    # --- PASO 2 ---
+    # --- PASO 2 (FORMATO LIMPIO Y MAYÚSCULAS EN ENCABEZADOS) ---
     elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
-        df = pd.read_sql_query("SELECT id, bodega_origen, codigo_reyimen, descripcion, cantidad, lote, vencimiento FROM productos WHERE paso_actual = 1 AND estado_global = 'En trámite'", conn)
+        df = pd.read_sql_query("""
+            SELECT 
+                id AS ID, 
+                bodega_origen AS "Bodega Origen", 
+                codigo_reyimen AS "Código Reyimen", 
+                descripcion AS "Descripción", 
+                tipo_documento AS "Tipo de Compra", 
+                cantidad AS "Cantidad", 
+                lote AS "Lote", 
+                vencimiento AS "Vencimiento" 
+            FROM productos 
+            WHERE paso_actual = 1 AND estado_global = 'En trámite'
+        """, conn)
         
         if df.empty:
             st.info("No hay productos pendientes en Paso 1.")
         else:
-            st.dataframe(df)
-            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['id'].tolist())
+            st.dataframe(df, hide_index=True)
+            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso2"):
                 aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
@@ -138,13 +149,22 @@ def render_ui(user_info: dict):
     # --- PASO 3 ---
     elif tab_seleccionada == "Paso 3: Registro/Proveedor":
         st.header("🚚 Paso 3 — Área de Registro / Proveedor")
-        df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, estado_canje FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite'", conn)
+        df = pd.read_sql_query("""
+            SELECT 
+                id AS ID, 
+                codigo_reyimen AS "Código Reyimen", 
+                descripcion AS "Descripción", 
+                lote AS "Lote", 
+                estado_canje AS "Estado Canje" 
+            FROM productos 
+            WHERE paso_actual = 2 AND estado_global = 'En trámite'
+        """, conn)
         
         if df.empty:
             st.info("No hay productos pendientes para gestionar con proveedor.")
         else:
-            st.dataframe(df)
-            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['id'].tolist())
+            st.dataframe(df, hide_index=True)
+            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso3"):
                 proveedor = st.selectbox("Proveedor Oficial *", PROVEEDORES_OFICIALES)
@@ -165,13 +185,22 @@ def render_ui(user_info: dict):
     # --- PASO 4 ---
     elif tab_seleccionada == "Paso 4: Bulto y Ubicación":
         st.header("📦 Paso 4 — Gestión de Bulto y Ubicaciones")
-        df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, proveedor FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'", conn)
+        df = pd.read_sql_query("""
+            SELECT 
+                id AS ID, 
+                codigo_reyimen AS "Código Reyimen", 
+                descripcion AS "Descripción", 
+                lote AS "Lote", 
+                proveedor AS "Proveedor" 
+            FROM productos 
+            WHERE paso_actual = 3 AND estado_global = 'En trámite'
+        """, conn)
         
         if df.empty:
             st.info("No hay productos pendientes para asignar bulto.")
         else:
-            st.dataframe(df)
-            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['id'].tolist())
+            st.dataframe(df, hide_index=True)
+            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso4"):
                 ub_fisica = st.selectbox("Ubicación Física *", BODEGAS_OFICIALES)
@@ -191,13 +220,23 @@ def render_ui(user_info: dict):
     # --- PASO 5 ---
     elif tab_seleccionada == "Paso 5: Resolución/Cierre":
         st.header("📜 Paso 5 — Resolución y Cierre")
-        df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, proveedor, numero_bulto FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite'", conn)
+        df = pd.read_sql_query("""
+            SELECT 
+                id AS ID, 
+                codigo_reyimen AS "Código Reyimen", 
+                descripcion AS "Descripción", 
+                lote AS "Lote", 
+                proveedor AS "Proveedor", 
+                numero_bulto AS "Número Bulto" 
+            FROM productos 
+            WHERE paso_actual = 4 AND estado_global = 'En trámite'
+        """, conn)
         
         if df.empty:
             st.info("No hay productos pendientes para cierre.")
         else:
-            st.dataframe(df)
-            prod_id = st.selectbox("Seleccione ID de Producto a CERRAR", df['id'].tolist())
+            st.dataframe(df, hide_index=True)
+            prod_id = st.selectbox("Seleccione ID de Producto a CERRAR", df['ID'].tolist())
             
             with st.form("form_paso5"):
                 num_res = st.text_input("Número de Resolución *")
@@ -217,7 +256,7 @@ def render_ui(user_info: dict):
     elif tab_seleccionada == "Histórico Concluidos":
         st.header("📁 Registros Históricos Concluidos")
         df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
-        st.dataframe(df)
+        st.dataframe(df, hide_index=True)
 
     # --- GESTIÓN DE USUARIOS (ADMIN) ---
     elif tab_seleccionada == "Gestión de Usuarios":
@@ -241,7 +280,15 @@ def render_ui(user_info: dict):
                         st.error(f"Error al crear usuario: {e}")
 
         st.subheader("Usuarios Registrados")
-        df_users = pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn)
-        st.dataframe(df_users)
+        df_users = pd.read_sql_query("""
+            SELECT 
+                id AS ID, 
+                usuario AS "Usuario", 
+                rol AS "Rol", 
+                nombre_completo AS "Nombre Completo", 
+                estado AS "Estado" 
+            FROM usuarios
+        """, conn)
+        st.dataframe(df_users, hide_index=True)
 
     conn.close()
