@@ -1,210 +1,240 @@
 """
-Interfaz del Paso 1: Informe Bodega.
-Firma de las funciones públicas:
-    render_step1_form(catalogo: list[dict], conn) -> None
+Módulo de Interfaz de Usuario para los 5 Pasos Operativos y Gestión de Usuarios.
 """
-
 import streamlit as st
-from datetime import date
-import sqlite3
-from typing import List, Dict
-
-from src.catalogo_base import (
-    OPCION_MANUAL,
-    get_opciones_selectbox,
-    buscar_por_etiqueta,
+import pandas as pd
+from datetime import datetime
+from src.database import get_connection
+from src.catalogo import (
+    get_catalogo, get_opciones_selectbox, buscar_por_etiqueta,
+    BODEGAS_OFICIALES, PROVEEDORES_OFICIALES, TIPOS_DOCUMENTO, OPCION_MANUAL
 )
+from src.importer import procesar_carga_masiva
 
-BODEGAS_OFICIALES = [
-    "Bodega BZ02 (Insumos clínicos)",
-    "Bodega CS08 (Insumos clínicos)",
-    "Bodega CZ69 (Insumos clínicos)",
-    "Bodega BZ28 (Insumos clínicos)",
-    "Bodega AZ10 (Fármacos)",
-    "Bodega AZ09 (Fármacos)",
-    "Bodega BZ03 (Sueros)",
-    "Farmacia",
-]
+def render_ui(user_info: dict):
+    st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
+    st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
+    
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state["logged_in"] = False
+        st.rerun()
 
+    rol = user_info['rol']
+    
+    # Menú de pestañas según rol
+    tabs_disponibles = []
+    if rol in ["admin", "bodega"]:
+        tabs_disponibles.append("Paso 1: Informe Bodega")
+        tabs_disponibles.append("Carga Masiva")
+    if rol in ["admin", "jefatura"]:
+        tabs_disponibles.append("Paso 2: Canjes (Jefatura)")
+    if rol in ["admin", "registro"]:
+        tabs_disponibles.append("Paso 3: Registro/Proveedor")
+    if rol in ["admin", "bodega"]:
+        tabs_disponibles.append("Paso 4: Bulto y Ubicación")
+    if rol in ["admin", "jefatura"]:
+        tabs_disponibles.append("Paso 5: Resolución/Cierre")
+    
+    tabs_disponibles.append("Histórico Concluidos")
+    
+    if rol == "admin":
+        tabs_disponibles.append("Gestión de Usuarios")
 
-def _inicializar_estado():
-    """Inicializa las claves de session_state usadas para el autocompletado."""
-    defaults = {
-        "sel_codigo_reyimen": "",
-        "sel_descripcion": "",
-        "sel_unidad": "",
-        "sel_costo": 0.0,
-        "modo_manual": False,
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+    tab_seleccionada = st.sidebar.radio("Navegación", tabs_disponibles)
+    
+    conn = get_connection()
 
-
-def _on_change_catalogo(catalogo: List[Dict]):
-    """Callback: al elegir un código en el selectbox, autocompleta los campos."""
-    etiqueta = st.session_state.get("select_reyimen", "")
-    if etiqueta == OPCION_MANUAL:
-        st.session_state["modo_manual"] = True
-        st.session_state["sel_codigo_reyimen"] = ""
-        st.session_state["sel_descripcion"] = ""
-        st.session_state["sel_unidad"] = ""
-        st.session_state["sel_costo"] = 0.0
-        return
-
-    producto = buscar_por_etiqueta(catalogo, etiqueta)
-    if producto:
-        st.session_state["modo_manual"] = False
-        st.session_state["sel_codigo_reyimen"] = producto["codigo"]
-        st.session_state["sel_descripcion"] = producto["descripcion"]
-        st.session_state["sel_unidad"] = producto["unidad"]
-        st.session_state["sel_costo"] = float(producto["costo"])
-
-
-def render_step1_form(catalogo: List[Dict], conn: sqlite3.Connection) -> None:
-    """
-    Renderiza el formulario completo del Paso 1 (Informe Bodega) y guarda
-    el registro en la base de datos al enviar.
-
-    catalogo: lista de productos entregada por catalogo_base.get_catalogo().
-              Si llega vacía (falla de catálogo), se activa modo manual,
-              pero el selector de Bodega NUNCA se deshabilita.
-    conn: conexión sqlite3 ya inicializada (src.database.init_db()).
-    """
-    _inicializar_estado()
-
-    st.subheader("📋 Paso 1 — Informe Bodega")
-
-    catalogo_disponible = bool(catalogo)
-    if not catalogo_disponible:
-        st.warning(
-            "⚠️ No fue posible cargar el catálogo Reyimen. "
-            "Se activó el modo de ingreso manual. El registro de Bodega "
-            "y el resto del formulario siguen funcionando con normalidad."
-        )
-        st.session_state["modo_manual"] = True
-
-    col1, col2 = st.columns(2)
-    with col1:
-        estado_producto = st.selectbox(
-            "Estado del producto", ["En revisión", "Concluido"], key="estado_producto"
-        )
-    with col2:
-        mes_informe = st.date_input(
-            "Mes de informe", value=date.today(), key="mes_informe"
-        )
-
-    # --- Selector de Bodega: SIEMPRE activo, pase lo que pase con el catálogo ---
-    bodega_origen = st.selectbox(
-        "Bodega/Farmacia origen *",
-        BODEGAS_OFICIALES,
-        key="bodega_origen",
-        help="Campo obligatorio. Se mantiene activo aunque el catálogo falle.",
-    )
-
-    tipo_producto = st.selectbox(
-        "Tipo de producto", ["Fármaco", "Insumo"], key="tipo_producto"
-    )
-
-    st.markdown("**Producto**")
-
-    if catalogo_disponible and not st.session_state["modo_manual"]:
+    # --- PASO 1 ---
+    if tab_seleccionada == "Paso 1: Informe Bodega":
+        st.header("📋 Paso 1 — Informe de Bodega")
+        catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
-        st.selectbox(
-            "Código Reyimen *",
-            opciones,
-            key="select_reyimen",
-            on_change=_on_change_catalogo,
-            args=(catalogo,),
-            index=None,
-            placeholder="Escribe para buscar por código o descripción...",
-        )
-        if st.button("✏️ Prefiero ingresar manualmente"):
-            st.session_state["modo_manual"] = True
-            st.rerun()
-    else:
-        st.caption(
-            "Modo manual activo — completa código, unidad y descripción abajo."
-        )
-        if catalogo_disponible and st.button("🔍 Volver a usar el catálogo"):
-            st.session_state["modo_manual"] = False
-            st.rerun()
+        
+        with st.form("form_paso1"):
+            col1, col2 = st.columns(2)
+            with col1:
+                bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES)
+                tipo_prod = st.selectbox("Tipo de producto", ["Fármaco", "Insumo"])
+                prod_sel = st.selectbox("Buscar Código Reyimen / Producto *", opciones)
+            
+            desc_auto, unidad_auto, cod_auto = "", "", ""
+            item = buscar_por_etiqueta(catalogo, prod_sel)
+            if item:
+                cod_auto = item["codigo"]
+                desc_auto = item["descripcion"]
+                unidad_auto = item["unidad"]
+                
+            with col2:
+                codigo = st.text_input("Código Reyimen *", value=cod_auto)
+                descripcion = st.text_input("Descripción *", value=desc_auto)
+                unidad = st.text_input("Unidad *", value=unidad_auto)
 
-    colc1, colc2, colc3 = st.columns(3)
-    with colc1:
-        codigo_reyimen = st.text_input(
-            "Código Reyimen *", value=st.session_state["sel_codigo_reyimen"]
-        )
-    with colc2:
-        unidad = st.text_input(
-            "Unidad *", value=st.session_state["sel_unidad"]
-        )
-    with colc3:
-        costo_unitario = st.number_input(
-            "Costo unitario estimado ($)",
-            min_value=0.0,
-            value=st.session_state["sel_costo"],
-            step=10.0,
-        )
+            c3, c4, c5 = st.columns(3)
+            with c3:
+                cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
+            with c4:
+                vencimiento = st.date_input("Fecha de Vencimiento *")
+            with c5:
+                lote = st.text_input("Lote *")
 
-    descripcion = st.text_input(
-        "Descripción *", value=st.session_state["sel_descripcion"]
-    )
+            motivo = st.text_area("Motivo de informe *")
+            
+            if st.form_submit_button("Guardar Paso 1"):
+                if not codigo or not descripcion or not lote or not motivo:
+                    st.error("Complete todos los campos obligatorios (*)")
+                else:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, usuario_registro, paso_actual)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, user_info['usuario']))
+                    conn.commit()
+                    st.success("Producto registrado exitosamente en el Paso 1.")
 
-    col3, col4 = st.columns(2)
-    with col3:
-        cantidad = st.number_input(
-            "Cantidad", min_value=0.0, step=1.0, format="%.2f"
-        )
-    with col4:
-        vencimiento = st.date_input("Vencimiento")
+    # --- CARGA MASIVA ---
+    elif tab_seleccionada == "Carga Masiva":
+        st.header("📤 Carga Masiva de Productos (Paso 1)")
+        uploaded = st.file_uploader("Subir archivo Excel o CSV", type=["xlsx", "xls", "csv"])
+        if uploaded and st.button("Procesar Archivo"):
+            ok, msg = procesar_carga_masiva(uploaded, user_info['usuario'])
+            if ok:
+                st.success(msg)
+            else:
+                st.error(msg)
 
-    lote = st.text_input("Lote *")
-    motivo_informe = st.text_area("Motivo de informe *")
-
-    col5, col6 = st.columns(2)
-    with col5:
-        tipo_compra = st.selectbox(
-            "Tipo de compra", ["CENABAST", "COMPRA PROPIA"]
-        )
-
-    st.markdown("---")
-
-    if st.button("💾 Guardar informe", type="primary"):
-        errores = []
-        if not bodega_origen:
-            errores.append("Bodega/Farmacia origen es obligatorio.")
-        if not codigo_reyimen:
-            errores.append("Código Reyimen es obligatorio.")
-        if not unidad:
-            errores.append("Unidad es obligatoria.")
-        if not descripcion:
-            errores.append("Descripción es obligatoria.")
-        if not lote:
-            errores.append("Lote es obligatorio.")
-        if not motivo_informe:
-            errores.append("Motivo de informe es obligatorio.")
-
-        if errores:
-            for e in errores:
-                st.error(e)
+    # --- PASO 2 ---
+    elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
+        st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
+        df = pd.read_sql_query("SELECT id, bodega_origen, codigo_reyimen, descripcion, cantidad, lote, vencimiento FROM productos WHERE paso_actual = 1 AND estado_global = 'En trámite'", conn)
+        
+        if df.empty:
+            st.info("No hay productos pendientes en Paso 1.")
         else:
-            registro = {
-                "estado_producto": estado_producto,
-                "mes_informe": str(mes_informe),
-                "bodega_origen": bodega_origen,
-                "tipo_producto": tipo_producto,
-                "codigo_reyimen": codigo_reyimen,
-                "unidad": unidad,
-                "descripcion": descripcion,
-                "cantidad": cantidad,
-                "vencimiento": str(vencimiento),
-                "lote": lote,
-                "motivo_informe": motivo_informe,
-                "tipo_compra": tipo_compra,
-                "costo_unitario": costo_unitario,
-            }
-            from src.database import insertar_registro
-            insertar_registro(conn, registro)
-            st.success("✅ Informe guardado correctamente.")
-            st.balloons()
+            st.dataframe(df)
+            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['id'].tolist())
+            
+            with st.form("form_paso2"):
+                aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
+                tipo_gestion = st.text_input("Tipo de gestión de canje")
+                obs = st.text_area("Observaciones Paso 2")
+                
+                if st.form_submit_button("Avanzar a Paso 3"):
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    UPDATE productos SET estado_canje=?, tipo_gestion_canje=?, fecha_paso2=?, observacion_paso2=?, paso_actual=2 WHERE id=?
+                    """, (aplica_canje, tipo_gestion, str(datetime.now().date()), obs, prod_id))
+                    conn.commit()
+                    st.success("Producto avanzado al Paso 3.")
+                    st.rerun()
+
+    # --- PASO 3 ---
+    elif tab_seleccionada == "Paso 3: Registro/Proveedor":
+        st.header("🚚 Paso 3 — Área de Registro / Proveedor")
+        df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, estado_canje FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite'", conn)
+        
+        if df.empty:
+            st.info("No hay productos pendientes para gestionar con proveedor.")
+        else:
+            st.dataframe(df)
+            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['id'].tolist())
+            
+            with st.form("form_paso3"):
+                proveedor = st.selectbox("Proveedor Oficial *", PROVEEDORES_OFICIALES)
+                tipo_doc = st.selectbox("Tipo de Documento *", TIPOS_DOCUMENTO)
+                num_doc = st.text_input("Número de Documento / Orden de Compra *")
+                tramite = st.text_input("Estado del trámite con proveedor")
+                obs = st.text_area("Observaciones Paso 3")
+                
+                if st.form_submit_button("Avanzar a Paso 4"):
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    UPDATE productos SET proveedor=?, tipo_documento=?, numero_documento_oc=?, tramite_proveedor=?, fecha_paso3=?, observacion_paso3=?, paso_actual=3 WHERE id=?
+                    """, (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
+                    conn.commit()
+                    st.success("Producto avanzado al Paso 4.")
+                    st.rerun()
+
+    # --- PASO 4 ---
+    elif tab_seleccionada == "Paso 4: Bulto y Ubicación":
+        st.header("📦 Paso 4 — Gestión de Bulto y Ubicaciones")
+        df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, proveedor FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'", conn)
+        
+        if df.empty:
+            st.info("No hay productos pendientes para asignar bulto.")
+        else:
+            st.dataframe(df)
+            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['id'].tolist())
+            
+            with st.form("form_paso4"):
+                ub_fisica = st.selectbox("Ubicación Física *", BODEGAS_OFICIALES)
+                ub_comp = st.selectbox("Ubicación Computacional *", BODEGAS_OFICIALES)
+                num_bulto = st.text_input("Número de Bulto *")
+                obs = st.text_area("Observaciones Paso 4")
+                
+                if st.form_submit_button("Avanzar a Paso 5"):
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, fecha_paso4=?, observacion_paso4=?, paso_actual=4 WHERE id=?
+                    """, (ub_fisica, ub_comp, num_bulto, str(datetime.now().date()), obs, prod_id))
+                    conn.commit()
+                    st.success("Producto avanzado al Paso 5.")
+                    st.rerun()
+
+    # --- PASO 5 ---
+    elif tab_seleccionada == "Paso 5: Resolución/Cierre":
+        st.header("📜 Paso 5 — Resolución y Cierre")
+        # FILTRO ESTRICTO: Solo muestra productos en trámite de paso 4
+        df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, proveedor, numero_bulto FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite'", conn)
+        
+        if df.empty:
+            st.info("No hay productos pendientes para cierre.")
+        else:
+            st.dataframe(df)
+            prod_id = st.selectbox("Seleccione ID de Producto a CERRAR", df['id'].tolist())
+            
+            with st.form("form_paso5"):
+                num_res = st.text_input("Número de Resolución *")
+                estado_fin = st.selectbox("Estado Final *", ["Concluido", "Dado de baja", "Canjeado"])
+                obs = st.text_area("Observaciones Paso 5")
+                
+                if st.form_submit_button("Finalizar Proceso"):
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    UPDATE productos SET resolucion_numero=?, estado_final=?, fecha_resolucion=?, observacion_paso5=?, paso_actual=5, estado_global='Concluido' WHERE id=?
+                    """, (num_res, estado_fin, str(datetime.now().date()), obs, prod_id))
+                    conn.commit()
+                    st.success("Producto CONCLUIDO con éxito. Se ha archivado al histórico.")
+                    st.rerun()
+
+    # --- HISTÓRICO ---
+    elif tab_seleccionada == "Histórico Concluidos":
+        st.header("📁 Registros Historicos Concluidos")
+        df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
+        st.dataframe(df)
+
+    # --- GESTIÓN DE USUARIOS (ADMIN) ---
+    elif tab_seleccionada == "Gestión de Usuarios":
+        st.header("👥 Módulo de Gestión de Usuarios")
+        
+        with st.form("form_nuevo_usuario"):
+            st.subheader("Crear Nuevo Usuario")
+            u_user = st.text_input("Usuario")
+            u_pass = st.text_input("Contraseña", type="password")
+            u_nombre = st.text_input("Nombre Completo")
+            u_rol = st.selectbox("Rol de Acceso", ["admin", "jefatura", "registro", "bodega"])
+            
+            if st.form_submit_button("Crear Usuario"):
+                if u_user and u_pass:
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
+                        conn.commit()
+                        st.success("Usuario creado exitosamente.")
+                    except Exception as e:
+                        st.error(f"Error al crear usuario: {e}")
+
+        st.subheader("Usuarios Registrados")
+        df_users = pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn)
+        st.dataframe(df_users)
+
+    conn.close()

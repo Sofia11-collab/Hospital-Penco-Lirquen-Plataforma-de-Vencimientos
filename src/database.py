@@ -1,67 +1,93 @@
 """
-Capa de persistencia (SQLite) para los informes de Bodega - Paso 1.
-
-Nota: en Streamlit Cloud el disco es efímero (se reinicia en cada
-redeploy o reinicio del contenedor). Para uso real y continuo del
-personal de bodega, reemplazar esta capa por una fuente persistente
-externa (Google Sheets, Supabase, Postgres, etc.).
+Módulo de Base de Datos SQLite para la gestión de productos y usuarios.
 """
-
 import sqlite3
-import pandas as pd
-from typing import Dict
-from pathlib import Path
+from typing import List, Dict, Optional
 
-DB_PATH = Path("vencimientos_penco_lirquen.db")
+DB_NAME = "gestion_vencimientos.db"
 
-COLUMNAS = [
-    "estado_producto", "mes_informe", "bodega_origen", "tipo_producto",
-    "codigo_reyimen", "unidad", "descripcion", "cantidad", "vencimiento",
-    "lote", "motivo_informe", "tipo_compra", "costo_unitario",
-]
-
-
-def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
-    """Inicializa (o abre) la base de datos y crea la tabla si no existe."""
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    columnas_sql = ", ".join([f'"{c}" TEXT' for c in COLUMNAS])
-    conn.execute(f"""
-        CREATE TABLE IF NOT EXISTS informes_bodega (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            {columnas_sql}
-        )
-    """)
-    conn.commit()
+def get_connection():
+    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
     return conn
 
-
-def insertar_registro(conn: sqlite3.Connection, registro: Dict) -> None:
-    """Inserta un único registro (dict) validando que existan todas las columnas."""
-    fila = {c: registro.get(c, "") for c in COLUMNAS}
-    placeholders = ", ".join(["?"] * len(COLUMNAS))
-    columnas_sql = ", ".join([f'"{c}"' for c in COLUMNAS])
-    conn.execute(
-        f'INSERT INTO informes_bodega ({columnas_sql}) VALUES ({placeholders})',
-        [str(fila[c]) for c in COLUMNAS],
+def init_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Tabla de Usuarios
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        rol TEXT NOT NULL,
+        nombre_completo TEXT,
+        estado TEXT DEFAULT 'Activo'
     )
+    """)
+    
+    # Insertar usuarios por defecto si no existen
+    usuarios_base = [
+        ("admin", "admin123", "admin", "Administrador General"),
+        ("jefatura", "jefatura123", "jefatura", "Jefatura de Farmacia/Bodega"),
+        ("registro", "registro123", "registro", "Encargado de Registro y Proveedores"),
+        ("bodega", "bodega123", "bodega", "Personal de Bodega"),
+    ]
+    
+    for u, p, r, n in usuarios_base:
+        cursor.execute("INSERT OR IGNORE INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u, p, r, n))
+
+    # Tabla de Productos (Flujo de 5 Pasos)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS productos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        bodega_origen TEXT,
+        tipo_producto TEXT,
+        codigo_reyimen TEXT,
+        descripcion TEXT,
+        unidad TEXT,
+        cantidad REAL,
+        vencimiento TEXT,
+        lote TEXT,
+        motivo_informe TEXT,
+        tipo_compra TEXT,
+        precio_unitario REAL,
+        usuario_registro TEXT,
+        
+        -- Paso 2
+        estado_canje TEXT,
+        tipo_gestion_canje TEXT,
+        fecha_paso2 TEXT,
+        observacion_paso2 TEXT,
+        
+        -- Paso 3
+        proveedor TEXT,
+        tipo_documento TEXT,
+        numero_documento_oc TEXT,
+        tramite_proveedor TEXT,
+        fecha_paso3 TEXT,
+        observacion_paso3 TEXT,
+        
+        -- Paso 4
+        ubicacion_fisica TEXT,
+        ubicacion_computacional TEXT,
+        numero_bulto TEXT,
+        fecha_paso4 TEXT,
+        observacion_paso4 TEXT,
+        
+        -- Paso 5
+        resolucion_numero TEXT,
+        estado_final TEXT,
+        fecha_resolucion TEXT,
+        observacion_paso5 TEXT,
+        
+        -- Control
+        paso_actual INTEGER DEFAULT 1,
+        estado_global TEXT DEFAULT 'En trámite'
+    )
+    """)
+    
     conn.commit()
-
-
-def insertar_registros_bulk(conn: sqlite3.Connection, df: pd.DataFrame) -> int:
-    """Inserta múltiples registros desde un DataFrame ya normalizado. Retorna cuántos insertó."""
-    count = 0
-    for _, fila in df.iterrows():
-        registro = {c: fila.get(c, "") for c in COLUMNAS}
-        insertar_registro(conn, registro)
-        count += 1
-    return count
-
-
-def obtener_registros(conn: sqlite3.Connection) -> pd.DataFrame:
-    """Retorna todos los registros como DataFrame, más recientes primero."""
-    try:
-        return pd.read_sql_query(
-            "SELECT * FROM informes_bodega ORDER BY id DESC", conn
-        )
-    except Exception:
-        return pd.DataFrame(columns=["id"] + COLUMNAS)
+    conn.close()
