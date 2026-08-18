@@ -277,57 +277,94 @@ def render_ui(user_info: dict):
                     st.success("Producto avanzado al Paso 3.")
                     st.rerun()
 
-    # --- PASO 3 (DESPLEGABLE EN ESTADO DEL TRÁMITE CON PROVEEDOR) ---
+    # --- PASO 3 (REGISTRO / PROVEEDOR CON MODULO DE SEGUIMIENTO CONTINUO) ---
     elif tab_seleccionada == "Paso 3: Registro/Proveedor":
         st.header("🚚 Paso 3 — Área de Registro / Proveedor")
-        df = pd.read_sql_query("""
-            SELECT 
-                id AS ID, 
-                codigo_reyimen AS "Código Reyimen", 
-                descripcion AS "Descripción", 
-                cantidad AS "Cantidad",
-                lote AS "Lote", 
-                estado_canje AS "Estado Canje" 
-            FROM productos 
-            WHERE paso_actual = 2 AND estado_global = 'En trámite'
-        """, conn)
         
-        if df.empty:
-            st.info("No hay productos pendientes para gestionar con proveedor.")
-        else:
-            st.dataframe(
-                df, 
-                hide_index=True, 
-                use_container_width=True,
-                column_config={
-                    "ID": st.column_config.NumberColumn(width="small"),
-                    "Código Reyimen": st.column_config.TextColumn(width="small"),
-                    "Descripción": st.column_config.TextColumn(width="large"),
-                    "Cantidad": st.column_config.NumberColumn(width="small"),
-                    "Lote": st.column_config.TextColumn(width="small"),
-                    "Estado Canje": st.column_config.TextColumn(width="medium"),
-                }
-            )
-            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
+        tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso (Paso 2)", "🔄 Seguimiento y Actualización de Trámites"])
+
+        # PESTAÑA 1: NUEVOS PRODUCTOS QUE VIENEN DE PASO 2
+        with tab_p3_nuevo:
+            df_p3_nuevo = pd.read_sql_query("""
+                SELECT 
+                    id AS ID, 
+                    codigo_reyimen AS "Código Reyimen", 
+                    descripcion AS "Descripción", 
+                    cantidad AS "Cantidad",
+                    lote AS "Lote", 
+                    estado_canje AS "Estado Canje" 
+                FROM productos 
+                WHERE paso_actual = 2 AND estado_global = 'En trámite'
+            """, conn)
             
-            with st.form("form_paso3"):
-                proveedor = st.selectbox("Proveedor Oficial *", PROVEEDORES_OFICIALES)
-                tipo_doc = st.selectbox("Tipo de Documento *", TIPOS_DOCUMENTO)
-                num_doc = st.text_input("Número de Documento / Orden de Compra *")
+            if df_p3_nuevo.empty:
+                st.info("No hay nuevos productos pendientes de ingresar en Paso 3.")
+            else:
+                st.dataframe(df_p3_nuevo, hide_index=True, use_container_width=True)
+                prod_id = st.selectbox("Seleccione ID de Producto a ingresar trámite", df_p3_nuevo['ID'].tolist())
                 
-                # Desplegable estandarizado para Estado del trámite
-                tramite = st.selectbox("Estado del trámite con proveedor *", ESTADOS_TRAMITE_PROVEEDOR)
+                with st.form("form_paso3_ingreso"):
+                    proveedor = st.selectbox("Proveedor Oficial *", PROVEEDORES_OFICIALES)
+                    tipo_doc = st.selectbox("Tipo de Documento *", TIPOS_DOCUMENTO)
+                    num_doc = st.text_input("Número de Documento / Orden de Compra *")
+                    tramite = st.selectbox("Estado del trámite con proveedor *", ESTADOS_TRAMITE_PROVEEDOR)
+                    obs = st.text_area("Observaciones Paso 3")
+                    
+                    if st.form_submit_button("Avanzar a Paso 4"):
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                        UPDATE productos SET proveedor=?, tipo_documento=?, numero_documento_oc=?, tramite_proveedor=?, fecha_paso3=?, observacion_paso3=?, paso_actual=3 WHERE id=?
+                        """, (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
+                        conn.commit()
+                        st.success("Producto registrado y avanzado al Paso 4.")
+                        st.rerun()
+
+        # PESTAÑA 2: SEGUIMIENTO Y MODIFICACIÓN DE TRÁMITES NO CONCLUIDOS
+        with tab_p3_seguimiento:
+            st.subheader("Gestión Continua de Productos en Trámite (No Concluidos)")
+            df_p3_seg = pd.read_sql_query("""
+                SELECT 
+                    id AS ID, 
+                    codigo_reyimen AS "Código", 
+                    descripcion AS "Descripción", 
+                    proveedor AS "Proveedor", 
+                    tramite_proveedor AS "Estado Trámite Actual",
+                    numero_documento_oc AS "N° Doc/OC",
+                    paso_actual AS "Paso Actual"
+                FROM productos 
+                WHERE paso_actual >= 3 AND estado_global = 'En trámite'
+            """, conn)
+
+            if df_p3_seg.empty:
+                st.info("No hay productos con trámites activos en seguimiento.")
+            else:
+                st.dataframe(df_p3_seg, hide_index=True, use_container_width=True)
                 
-                obs = st.text_area("Observaciones Paso 3")
+                id_seg = st.selectbox("Seleccione ID del Producto para actualizar su Estado de Trámite", df_p3_seg['ID'].tolist())
+                prod_seg_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
                 
-                if st.form_submit_button("Avanzar a Paso 4"):
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                    UPDATE productos SET proveedor=?, tipo_documento=?, numero_documento_oc=?, tramite_proveedor=?, fecha_paso3=?, observacion_paso3=?, paso_actual=3 WHERE id=?
-                    """, (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
-                    conn.commit()
-                    st.success("Producto avanzado al Paso 4.")
-                    st.rerun()
+                if prod_seg_data:
+                    with st.form("form_paso3_actualizar"):
+                        st.markdown(f"**Actualizando Estado para ID #{id_seg} — {prod_seg_data['descripcion']}**")
+                        
+                        idx_prov = PROVEEDORES_OFICIALES.index(prod_seg_data['proveedor']) if prod_seg_data['proveedor'] in PROVEEDORES_OFICIALES else 0
+                        idx_tram = ESTADOS_TRAMITE_PROVEEDOR.index(prod_seg_data['tramite_proveedor']) if prod_seg_data['tramite_proveedor'] in ESTADOS_TRAMITE_PROVEEDOR else 0
+                        
+                        u_proveedor = st.selectbox("Proveedor Oficial *", PROVEEDORES_OFICIALES, index=idx_prov)
+                        u_num_doc = st.text_input("Número de Documento / Orden de Compra *", value=prod_seg_data['numero_documento_oc'] or "")
+                        u_tramite = st.selectbox("Actualizar Estado del Trámite *", ESTADOS_TRAMITE_PROVEEDOR, index=idx_tram)
+                        u_obs = st.text_area("Nueva Observación / Historial de Gestión", value=prod_seg_data['observacion_paso3'] or "")
+                        
+                        if st.form_submit_button("💾 Guardar Actualización de Trámite"):
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE productos 
+                                SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=?
+                                WHERE id=?
+                            """, (u_proveedor, u_num_doc, u_tramite, u_obs, id_seg))
+                            conn.commit()
+                            st.success(f"Estado del trámite para ID #{id_seg} actualizado correctamente.")
+                            st.rerun()
 
     # --- PASO 4 ---
     elif tab_seleccionada == "Paso 4: Bulto y Ubicación":
