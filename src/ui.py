@@ -1,5 +1,5 @@
 """
-Módulo de Interfaz de Usuario para los 5 Pasos Operativos y Gestión de Usuarios.
+Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Gestión de Usuarios y Dashboard de Análisis.
 """
 import streamlit as st
 import pandas as pd
@@ -64,6 +64,7 @@ def render_ui(user_info: dict):
         tabs_disponibles.append("Paso 5: Resolución/Cierre")
     
     tabs_disponibles.append("Histórico Concluidos")
+    tabs_disponibles.append("📊 Dashboard / Análisis")
     
     if rol == "admin":
         tabs_disponibles.append("Gestión de Usuarios")
@@ -80,7 +81,6 @@ def render_ui(user_info: dict):
         
         tab_p1_ingresar, tab_p1_editar = st.tabs(["➕ Nuevo Registro", "✏️ Editar / Modificar Registros Existentes"])
 
-        # PESTAÑA 1: NUEVO REGISTRO
         with tab_p1_ingresar:
             c_busq1, c_busq2 = st.columns(2)
             with c_busq1:
@@ -131,7 +131,6 @@ def render_ui(user_info: dict):
                         st.success("Producto registrado exitosamente en el Paso 1.")
                         st.rerun()
 
-        # PESTAÑA 2: EDITAR REGISTROS
         with tab_p1_editar:
             st.subheader("Registros Ingresados en Paso 1 (Modificables)")
             df_p1 = pd.read_sql_query("""
@@ -299,7 +298,6 @@ def render_ui(user_info: dict):
         
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso (Paso 2)", "🔄 Seguimiento y Actualización de Trámites"])
 
-        # PESTAÑA 1: NUEVOS PRODUCTOS QUE VIENEN DE PASO 2
         with tab_p3_nuevo:
             df_p3_nuevo = pd.read_sql_query("""
                 SELECT 
@@ -335,7 +333,6 @@ def render_ui(user_info: dict):
                         st.success("Producto registrado y avanzado al Paso 4.")
                         st.rerun()
 
-        # PESTAÑA 2: SEGUIMIENTO
         with tab_p3_seguimiento:
             st.subheader("Gestión Continua de Productos en Trámite (No Concluidos)")
             df_p3_seg = pd.read_sql_query("""
@@ -417,13 +414,12 @@ def render_ui(user_info: dict):
                     st.success("Producto avanzado al Paso 5.")
                     st.rerun()
 
-    # --- PASO 5 (RESOLUCIÓN, CIERRE Y PRODUCTOS SIN CARTA DE CANJE) ---
+    # --- PASO 5 ---
     elif tab_seleccionada == "Paso 5: Resolución/Cierre":
         st.header("📜 Paso 5 — Resolución y Cierre")
         
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre General de Proceso", "🟢 Productos Sin Carta de Canje"])
 
-        # PESTAÑA 1: CIERRE GENERAL
         with tab_p5_cierre:
             df_p5 = pd.read_sql_query("""
                 SELECT 
@@ -457,7 +453,6 @@ def render_ui(user_info: dict):
                         st.success("Producto CONCLUIDO con éxito. Se ha archivado al histórico.")
                         st.rerun()
 
-        # PESTAÑA 2: PRODUCTO SIN CARTA DE CANJE (DIFUSIÓN RED Y REDISTRIBUCIÓN STOCK)
         with tab_p5_sin_canje:
             st.subheader("🟢 Gestión de Productos Sin Carta de Canje")
             df_p5_sc = pd.read_sql_query("""
@@ -509,6 +504,53 @@ def render_ui(user_info: dict):
         st.header("📁 Registros Históricos Concluidos")
         df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
         st.dataframe(df, hide_index=True, use_container_width=True)
+
+    # --- NUEVA PESTAÑA: DASHBOARD / ANÁLISIS ---
+    elif tab_seleccionada == "📊 Dashboard / Análisis":
+        st.header("📊 Dashboard Gerencial y Análisis de Datos")
+        
+        df_all = pd.read_sql_query("SELECT * FROM productos", conn)
+        
+        if df_all.empty:
+            st.info("No hay datos suficientes para generar análisis.")
+        else:
+            # 1. Métricas Principales (KPIs)
+            tot_reg = len(df_all)
+            concluidos = len(df_all[df_all['estado_global'] == 'Concluido'])
+            tramite = len(df_all[df_all['estado_global'] == 'En trámite'])
+            
+            # Unidades rescatadas/canjeadas
+            canjeados_df = df_all[df_all['estado_final'] == 'Canjeado']
+            unidades_canjeadas = canjeados_df['cantidad'].sum() if not canjeados_df.empty else 0
+            
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Trámites Registrados", tot_reg)
+            m2.metric("En Trámite Activo", tramite)
+            m3.metric("Trámites Concluidos", concluidos)
+            m4.metric("Unidades Canjeadas/Rescatadas", int(unidades_canjeadas))
+            
+            st.divider()
+
+            # 2. Tablas y Desgloses por Criterios
+            col_d1, col_d2 = st.columns(2)
+            
+            with col_d1:
+                st.subheader("📦 Trámites por Bodega de Origen")
+                df_bod = df_all.groupby('bodega_origen').size().reset_index(name='Cantidad Trámites')
+                st.dataframe(df_bod, hide_index=True, use_container_width=True)
+
+                st.subheader("⚖️ Estado de Canjes (Jefatura)")
+                df_canje = df_all.groupby('estado_canje').size().reset_index(name='Total Registros')
+                st.dataframe(df_canje, hide_index=True, use_container_width=True)
+
+            with col_d2:
+                st.subheader("⚠️ Motivos de Informe")
+                df_mot = df_all.groupby('motivo_informe').size().reset_index(name='Total Registros')
+                st.dataframe(df_mot, hide_index=True, use_container_width=True)
+
+                st.subheader("🚚 Avance por Estado de Trámite")
+                df_tram = df_all[df_all['tramite_proveedor'].notnull()].groupby('tramite_proveedor').size().reset_index(name='Total')
+                st.dataframe(df_tram, hide_index=True, use_container_width=True)
 
     # --- GESTIÓN DE USUARIOS (ADMIN) ---
     elif tab_seleccionada == "Gestión de Usuarios":
