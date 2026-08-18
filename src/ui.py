@@ -124,7 +124,7 @@ def render_ui(user_info: dict):
             if df_p1.empty:
                 st.info("No hay registros pendientes en Paso 1 para modificar.")
             else:
-                st.dataframe(df_p1, hide_index=True)
+                st.dataframe(df_p1, hide_index=True, use_container_width=True)
                 id_mod = st.selectbox("Seleccione ID del registro a Modificar o Eliminar", df_p1['ID'].tolist())
                 prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
                 
@@ -185,19 +185,19 @@ def render_ui(user_info: dict):
             else:
                 st.error(msg)
 
-    # --- PASO 2 (Opciones ampliadas en ¿Aplica Canje?) ---
+    # --- PASO 2 (TABLA COMPACTA SIN DESPLAZAMIENTO HORIZONTAL) ---
     elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
         df = pd.read_sql_query("""
             SELECT 
                 id AS ID, 
-                bodega_origen AS "Bodega Origen", 
-                codigo_reyimen AS "Código Reyimen", 
-                descripcion AS "Descripción", 
-                tipo_documento AS "Tipo de Compra", 
-                cantidad AS "Cantidad", 
-                lote AS "Lote", 
-                vencimiento AS "Vencimiento" 
+                bodega_origen AS Bodega, 
+                codigo_reyimen AS Código, 
+                descripcion AS Descripción, 
+                tipo_documento AS Compra, 
+                cantidad AS Cant, 
+                lote AS Lote, 
+                vencimiento AS Vencimiento 
             FROM productos 
             WHERE paso_actual = 1 AND estado_global = 'En trámite'
         """, conn)
@@ -224,10 +224,27 @@ def render_ui(user_info: dict):
                 except Exception:
                     return ""
 
-            df["Meses por Vencer"] = df["Vencimiento"].apply(calcular_meses)
-            df["Fecha Límite Retiro (60 días)"] = df["Vencimiento"].apply(calcular_fecha_limite)
+            df["Meses Vencer"] = df["Vencimiento"].apply(calcular_meses)
+            df["Límite Retiro (60d)"] = df["Vencimiento"].apply(calcular_fecha_limite)
 
-            st.dataframe(df, hide_index=True)
+            # Configuración de anchos ajustados para visión completa
+            st.dataframe(
+                df, 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={
+                    "ID": st.column_config.NumberColumn(width="small"),
+                    "Bodega": st.column_config.TextColumn(width="small"),
+                    "Código": st.column_config.TextColumn(width="small"),
+                    "Descripción": st.column_config.TextColumn(width="large"),
+                    "Compra": st.column_config.TextColumn(width="small"),
+                    "Cant": st.column_config.NumberColumn(width="small"),
+                    "Lote": st.column_config.TextColumn(width="small"),
+                    "Vencimiento": st.column_config.TextColumn(width="small"),
+                    "Meses Vencer": st.column_config.NumberColumn(width="small"),
+                    "Límite Retiro (60d)": st.column_config.TextColumn(width="small"),
+                }
+            )
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso2"):
@@ -266,7 +283,7 @@ def render_ui(user_info: dict):
         if df.empty:
             st.info("No hay productos pendientes para gestionar con proveedor.")
         else:
-            st.dataframe(df, hide_index=True)
+            st.dataframe(df, hide_index=True, use_container_width=True)
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso3"):
@@ -302,7 +319,7 @@ def render_ui(user_info: dict):
         if df.empty:
             st.info("No hay productos pendientes para asignar bulto.")
         else:
-            st.dataframe(df, hide_index=True)
+            st.dataframe(df, hide_index=True, use_container_width=True)
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso4"):
@@ -338,7 +355,7 @@ def render_ui(user_info: dict):
         if df.empty:
             st.info("No hay productos pendientes para cierre.")
         else:
-            st.dataframe(df, hide_index=True)
+            st.dataframe(df, hide_index=True, use_container_width=True)
             prod_id = st.selectbox("Seleccione ID de Producto a CERRAR", df['ID'].tolist())
             
             with st.form("form_paso5"):
@@ -359,7 +376,7 @@ def render_ui(user_info: dict):
     elif tab_seleccionada == "Histórico Concluidos":
         st.header("📁 Registros Históricos Concluidos")
         df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
-        st.dataframe(df, hide_index=True)
+        st.dataframe(df, hide_index=True, use_container_width=True)
 
     # --- GESTIÓN DE USUARIOS (ADMIN) ---
     elif tab_seleccionada == "Gestión de Usuarios":
@@ -392,6 +409,6 @@ def render_ui(user_info: dict):
                 estado AS "Estado" 
             FROM usuarios
         """, conn)
-        st.dataframe(df_users, hide_index=True)
+        st.dataframe(df_users, hide_index=True, use_container_width=True)
 
     conn.close()
