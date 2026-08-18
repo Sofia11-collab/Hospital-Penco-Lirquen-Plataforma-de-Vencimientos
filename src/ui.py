@@ -44,37 +44,42 @@ def render_ui(user_info: dict):
     
     conn = get_connection()
 
-    # --- PASO 1 ---
+    # --- PASO 1 (REACTIVO) ---
     if tab_seleccionada == "Paso 1: Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
         
+        # Selector fuera del formulario para que autocomplete en tiempo real
+        c_busq1, c_busq2 = st.columns(2)
+        with c_busq1:
+            bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES)
+            tipo_prod = st.selectbox("Tipo de producto", ["Fármaco", "Insumo"])
+        
+        with c_busq2:
+            prod_sel = st.selectbox("Buscar Código Reyimen / Producto *", opciones, key="busqueda_producto")
+            
+        cod_auto, desc_auto, unidad_auto = "", "", ""
+        item = buscar_por_etiqueta(catalogo, prod_sel)
+        if item:
+            cod_auto = item.get("codigo", "")
+            desc_auto = item.get("descripcion", "")
+            unidad_auto = item.get("unidad", "")
+
         with st.form("form_paso1"):
             col1, col2 = st.columns(2)
             with col1:
-                bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES)
-                tipo_prod = st.selectbox("Tipo de producto", ["Fármaco", "Insumo"])
-                prod_sel = st.selectbox("Buscar Código Reyimen / Producto *", opciones)
-            
-            desc_auto, unidad_auto, cod_auto = "", "", ""
-            item = buscar_por_etiqueta(catalogo, prod_sel)
-            if item:
-                cod_auto = item["codigo"]
-                desc_auto = item["descripcion"]
-                unidad_auto = item["unidad"]
-                
-            with col2:
                 codigo = st.text_input("Código Reyimen *", value=cod_auto)
                 descripcion = st.text_input("Descripción *", value=desc_auto)
+            
+            with col2:
                 unidad = st.text_input("Unidad *", value=unidad_auto)
-
-            c3, c4, c5 = st.columns(3)
-            with c3:
                 cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
-            with c4:
+
+            c3, c4 = st.columns(2)
+            with c3:
                 vencimiento = st.date_input("Fecha de Vencimiento *")
-            with c5:
+            with c4:
                 lote = st.text_input("Lote *")
 
             motivo = st.text_area("Motivo de informe *")
@@ -183,7 +188,6 @@ def render_ui(user_info: dict):
     # --- PASO 5 ---
     elif tab_seleccionada == "Paso 5: Resolución/Cierre":
         st.header("📜 Paso 5 — Resolución y Cierre")
-        # FILTRO ESTRICTO: Solo muestra productos en trámite de paso 4
         df = pd.read_sql_query("SELECT id, codigo_reyimen, descripcion, lote, proveedor, numero_bulto FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite'", conn)
         
         if df.empty:
@@ -208,7 +212,7 @@ def render_ui(user_info: dict):
 
     # --- HISTÓRICO ---
     elif tab_seleccionada == "Histórico Concluidos":
-        st.header("📁 Registros Historicos Concluidos")
+        st.header("📁 Registros Históricos Concluidos")
         df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
         st.dataframe(df)
 
