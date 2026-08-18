@@ -44,13 +44,13 @@ def render_ui(user_info: dict):
     
     conn = get_connection()
 
-    # --- PASO 1 (REACTIVO) ---
+    # --- PASO 1 (REACTIVO + MOTIVO + TIPO DE COMPRA) ---
     if tab_seleccionada == "Paso 1: Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
         
-        # Selector fuera del formulario para que autocomplete en tiempo real
+        # Buscador en la parte superior fuera del formulario
         c_busq1, c_busq2 = st.columns(2)
         with c_busq1:
             bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES)
@@ -71,28 +71,31 @@ def render_ui(user_info: dict):
             with col1:
                 codigo = st.text_input("Código Reyimen *", value=cod_auto)
                 descripcion = st.text_input("Descripción *", value=desc_auto)
+                tipo_compra = st.selectbox("Tipo de compra / Documento *", TIPOS_DOCUMENTO)
             
             with col2:
                 unidad = st.text_input("Unidad *", value=unidad_auto)
                 cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
+                motivo = st.selectbox(
+                    "Motivo de informe *",
+                    ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
+                )
 
             c3, c4 = st.columns(2)
             with c3:
                 vencimiento = st.date_input("Fecha de Vencimiento *")
             with c4:
                 lote = st.text_input("Lote *")
-
-            motivo = st.text_area("Motivo de informe *")
             
             if st.form_submit_button("Guardar Paso 1"):
-                if not codigo or not descripcion or not lote or not motivo:
+                if not codigo or not descripcion or not lote:
                     st.error("Complete todos los campos obligatorios (*)")
                 else:
                     cursor = conn.cursor()
                     cursor.execute("""
-                    INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, usuario_registro, paso_actual)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                    """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, user_info['usuario']))
+                    INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario']))
                     conn.commit()
                     st.success("Producto registrado exitosamente en el Paso 1.")
 
