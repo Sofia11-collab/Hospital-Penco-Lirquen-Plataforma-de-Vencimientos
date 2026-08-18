@@ -23,6 +23,9 @@ ESTADOS_TRAMITE_PROVEEDOR = [
     "Producto recibido"
 ]
 
+# Lista de bodegas extendida para el Paso 4 (incluye Bodega de Excluidos)
+BODEGAS_PASO4 = BODEGAS_OFICIALES + ["Bodega de Excluidos"]
+
 def render_ui(user_info: dict):
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
@@ -277,7 +280,7 @@ def render_ui(user_info: dict):
                     st.success("Producto avanzado al Paso 3.")
                     st.rerun()
 
-    # --- PASO 3 (REGISTRO / PROVEEDOR CON MODULO DE SEGUIMIENTO CONTINUO) ---
+    # --- PASO 3 ---
     elif tab_seleccionada == "Paso 3: Registro/Proveedor":
         st.header("🚚 Paso 3 — Área de Registro / Proveedor")
         
@@ -319,7 +322,7 @@ def render_ui(user_info: dict):
                         st.success("Producto registrado y avanzado al Paso 4.")
                         st.rerun()
 
-        # PESTAÑA 2: SEGUIMIENTO Y MODIFICACIÓN DE TRÁMITES NO CONCLUIDOS
+        # PESTAÑA 2: SEGUIMIENTO
         with tab_p3_seguimiento:
             st.subheader("Gestión Continua de Productos en Trámite (No Concluidos)")
             df_p3_seg = pd.read_sql_query("""
@@ -366,7 +369,7 @@ def render_ui(user_info: dict):
                             st.success(f"Estado del trámite para ID #{id_seg} actualizado correctamente.")
                             st.rerun()
 
-    # --- PASO 4 ---
+    # --- PASO 4 (CON BODEGA DE EXCLUIDOS INCLUIDA) ---
     elif tab_seleccionada == "Paso 4: Bulto y Ubicación":
         st.header("📦 Paso 4 — Gestión de Bulto y Ubicaciones")
         df = pd.read_sql_query("""
@@ -387,8 +390,8 @@ def render_ui(user_info: dict):
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso4"):
-                ub_fisica = st.selectbox("Ubicación Física *", BODEGAS_OFICIALES)
-                ub_comp = st.selectbox("Ubicación Computacional *", BODEGAS_OFICIALES)
+                ub_fisica = st.selectbox("Ubicación Física *", BODEGAS_PASO4)
+                ub_comp = st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
                 num_bulto = st.text_input("Número de Bulto *")
                 obs = st.text_area("Observaciones Paso 4")
                 
