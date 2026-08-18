@@ -44,59 +44,142 @@ def render_ui(user_info: dict):
     
     conn = get_connection()
 
-    # --- PASO 1 (REACTIVO + MOTIVO + TIPO DE COMPRA) ---
+    # --- PASO 1 (INGRESO + MODIFICACIÓN Y EDICIÓN DE REGISTROS) ---
     if tab_seleccionada == "Paso 1: Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
         
-        c_busq1, c_busq2 = st.columns(2)
-        with c_busq1:
-            bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES)
-            tipo_prod = st.selectbox("Tipo de producto", ["Fármaco", "Insumo"])
-        
-        with c_busq2:
-            prod_sel = st.selectbox("Buscar Código Reyimen / Producto *", opciones, key="busqueda_producto")
-            
-        cod_auto, desc_auto, unidad_auto = "", "", ""
-        item = buscar_por_etiqueta(catalogo, prod_sel)
-        if item:
-            cod_auto = item.get("codigo", "")
-            desc_auto = item.get("descripcion", "")
-            unidad_auto = item.get("unidad", "")
+        tab_p1_ingresar, tab_p1_editar = st.tabs(["➕ Nuevo Registro", "✏️ Editar / Modificar Registros Existentes"])
 
-        with st.form("form_paso1"):
-            col1, col2 = st.columns(2)
-            with col1:
-                codigo = st.text_input("Código Reyimen *", value=cod_auto)
-                descripcion = st.text_input("Descripción *", value=desc_auto)
-                tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
+        # PESTAÑA 1: NUEVO REGISTRO
+        with tab_p1_ingresar:
+            c_busq1, c_busq2 = st.columns(2)
+            with c_busq1:
+                bodega = st.selectbox("Bodega/Farmacia Origen *", BODEGAS_OFICIALES, key="b_ingreso")
+                tipo_prod = st.selectbox("Tipo de producto", ["Fármaco", "Insumo"], key="tp_ingreso")
             
-            with col2:
-                unidad = st.text_input("Unidad *", value=unidad_auto)
-                cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
-                motivo = st.selectbox(
-                    "Motivo de informe *",
-                    ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
-                )
+            with c_busq2:
+                prod_sel = st.selectbox("Buscar Código Reyimen / Producto *", opciones, key="busqueda_producto")
+                
+            cod_auto, desc_auto, unidad_auto = "", "", ""
+            item = buscar_por_etiqueta(catalogo, prod_sel)
+            if item:
+                cod_auto = item.get("codigo", "")
+                desc_auto = item.get("descripcion", "")
+                unidad_auto = item.get("unidad", "")
 
-            c3, c4 = st.columns(2)
-            with c3:
-                vencimiento = st.date_input("Fecha de Vencimiento *")
-            with c4:
-                lote = st.text_input("Lote *")
-            
-            if st.form_submit_button("Guardar Paso 1"):
-                if not codigo or not descripcion or not lote:
-                    st.error("Complete todos los campos obligatorios (*)")
-                else:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                    INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                    """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario']))
-                    conn.commit()
-                    st.success("Producto registrado exitosamente en el Paso 1.")
+            with st.form("form_paso1"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    codigo = st.text_input("Código Reyimen *", value=cod_auto)
+                    descripcion = st.text_input("Descripción *", value=desc_auto)
+                    tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
+                
+                with col2:
+                    unidad = st.text_input("Unidad *", value=unidad_auto)
+                    cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
+                    motivo = st.selectbox(
+                        "Motivo de informe *",
+                        ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
+                    )
+
+                c3, c4 = st.columns(2)
+                with c3:
+                    vencimiento = st.date_input("Fecha de Vencimiento *")
+                with c4:
+                    lote = st.text_input("Lote *")
+                
+                if st.form_submit_button("Guardar Paso 1"):
+                    if not codigo or not descripcion or not lote:
+                        st.error("Complete todos los campos obligatorios (*)")
+                    else:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                        INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                        """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario']))
+                        conn.commit()
+                        st.success("Producto registrado exitosamente en el Paso 1.")
+                        st.rerun()
+
+        # PESTAÑA 2: EDITAR / CORREGIR REGISTROS
+        with tab_p1_editar:
+            st.subheader("Registros Ingresados en Paso 1 (Modificables)")
+            df_p1 = pd.read_sql_query("""
+                SELECT 
+                    id AS ID, 
+                    bodega_origen AS "Bodega Origen", 
+                    codigo_reyimen AS "Código Reyimen", 
+                    descripcion AS "Descripción", 
+                    tipo_documento AS "Tipo de Compra", 
+                    cantidad AS "Cantidad", 
+                    lote AS "Lote", 
+                    vencimiento AS "Vencimiento",
+                    motivo_informe AS "Motivo Informe"
+                FROM productos 
+                WHERE paso_actual = 1 AND estado_global = 'En trámite'
+            """, conn)
+
+            if df_p1.empty:
+                st.info("No hay registros pendientes en Paso 1 para modificar.")
+            else:
+                st.dataframe(df_p1, hide_index=True)
+                
+                id_mod = st.selectbox("Seleccione ID del registro a Modificar o Eliminar", df_p1['ID'].tolist())
+                
+                # Cargar datos actuales del registro seleccionado
+                prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
+                
+                if prod_data:
+                    with st.form("form_editar_p1"):
+                        st.markdown(f"**Modificando Registro ID #{id_mod} — {prod_data['descripcion']}**")
+                        
+                        col_e1, col_e2 = st.columns(2)
+                        with col_e1:
+                            idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
+                            new_bodega = st.selectbox("Bodega Origen *", BODEGAS_OFICIALES, index=idx_bodega)
+                            new_tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"], index=0 if prod_data['tipo_documento']=="CENABAST" else 1)
+                            new_cantidad = st.number_input("Cantidad *", value=float(prod_data['cantidad']), min_value=0.0, step=1.0)
+                        
+                        with col_e2:
+                            new_lote = st.text_input("Lote *", value=prod_data['lote'])
+                            
+                            # Manejar fecha
+                            try:
+                                fecha_init = datetime.strptime(prod_data['vencimiento'], "%Y-%m-%d").date()
+                            except Exception:
+                                fecha_init = datetime.now().date()
+                                
+                            new_vencimiento = st.date_input("Fecha de Vencimiento *", value=fecha_init)
+                            
+                            motivos_opt = ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
+                            idx_mot = motivos_opt.index(prod_data['motivo_informe']) if prod_data['motivo_informe'] in motivos_opt else 0
+                            new_motivo = st.selectbox("Motivo de informe *", motivos_opt, index=idx_mot)
+
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            guardar_mod = st.form_submit_button("💾 Guardar Cambios")
+                        with btn_col2:
+                            eliminar_mod = st.form_submit_button("🗑️ Eliminar Registro")
+
+                        if guardar_mod:
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE productos 
+                                SET bodega_origen=?, tipo_documento=?, cantidad=?, lote=?, vencimiento=?, motivo_informe=?
+                                WHERE id=?
+                            """, (new_bodega, new_tipo_compra, new_cantidad, new_lote, str(new_vencimiento), new_motivo, id_mod))
+                            conn.commit()
+                            st.success(f"Registro #{id_mod} actualizado correctamente.")
+                            st.rerun()
+
+                        if eliminar_mod:
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM productos WHERE id=?", (id_mod,))
+                            conn.commit()
+                            st.warning(f"Registro #{id_mod} eliminado.")
+                            st.rerun()
 
     # --- CARGA MASIVA ---
     elif tab_seleccionada == "Carga Masiva":
@@ -109,7 +192,7 @@ def render_ui(user_info: dict):
             else:
                 st.error(msg)
 
-    # --- PASO 2 (FORMATO LIMPIO Y MAYÚSCULAS EN ENCABEZADOS) ---
+    # --- PASO 2 ---
     elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
         df = pd.read_sql_query("""
