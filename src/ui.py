@@ -506,7 +506,7 @@ def render_ui(user_info: dict):
         df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
         st.dataframe(df, hide_index=True, use_container_width=True)
 
-    # --- NUEVA PESTAÑA: CONSOLIDADO GENERAL DE PRODUCTOS Y ESTADOS ---
+    # --- CONSOLIDADO GENERAL ---
     elif tab_seleccionada == "🔍 Consolidado General":
         st.header("🔍 Consolidado General de Todos los Productos")
         
@@ -515,7 +515,6 @@ def render_ui(user_info: dict):
         if df_cons.empty:
             st.info("No hay productos registrados en el sistema.")
         else:
-            # Mapeo intuitivo de estado del producto según su paso
             def determinar_estado_general(row):
                 if row['estado_global'] == 'Concluido':
                     return f"Concluido ({row['estado_final'] or 'Archivado'})"
@@ -534,7 +533,6 @@ def render_ui(user_info: dict):
 
             df_cons['Estado Actual del Producto'] = df_cons.apply(determinar_estado_general, axis=1)
 
-            # Filtros dinámicos
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 search_text = st.text_input("🔎 Buscar por Descripción, Código Reyimen o Lote")
@@ -544,7 +542,6 @@ def render_ui(user_info: dict):
                     ["Todos", "En trámite", "Concluido"]
                 )
 
-            # Aplicar filtros
             if estado_filtro != "Todos":
                 df_cons = df_cons[df_cons['estado_global'] == estado_filtro]
                 
@@ -556,22 +553,21 @@ def render_ui(user_info: dict):
                 )
                 df_cons = df_cons[mask]
 
-            # Formatear tabla para mostrar
             df_mostrar = df_cons[[
                 'id', 'codigo_reyimen', 'descripcion', 'bodega_origen', 
                 'cantidad', 'lote', 'vencimiento', 'Estado Actual del Producto', 'proveedor'
             ]].copy()
 
             df_mostrar.columns = [
-                'ID', 'Código Reyimen', 'Descripción', 'Bodega Origen', 
-                'Cantidad', 'Lote', 'Vencimiento', 'Estado Actual', 'Proveedor'
+                'ID', 'CÓDIGO REYIMEN', 'DESCRIPCIÓN', 'BODEGA ORIGEN', 
+                'CANTIDAD', 'LOTE', 'VENCIMIENTO', 'ESTADO ACTUAL', 'PROVEEDOR'
             ]
 
             st.dataframe(df_mostrar, hide_index=True, use_container_width=True)
 
     # --- DASHBOARD / ANÁLISIS ---
     elif tab_seleccionada == "📊 Dashboard / Análisis":
-        st.header("📊 Dashboard Gerencial y Análisis de Datos")
+        st.header("📊 ANÁLISIS DE DATOS")
         
         df_all = pd.read_sql_query("SELECT * FROM productos", conn)
         
@@ -597,20 +593,24 @@ def render_ui(user_info: dict):
             
             with col_d1:
                 st.subheader("📦 Trámites por Bodega de Origen")
-                df_bod = df_all.groupby('bodega_origen').size().reset_index(name='Cantidad Trámites')
+                df_bod = df_all.groupby('bodega_origen').size().reset_index(name='CANTIDAD TRÁMITES')
+                df_bod.columns = ['BODEGA ORIGEN', 'CANTIDAD TRÁMITES']
                 st.dataframe(df_bod, hide_index=True, use_container_width=True)
 
                 st.subheader("⚖️ Estado de Canjes (Jefatura)")
-                df_canje = df_all.groupby('estado_canje').size().reset_index(name='Total Registros')
+                df_canje = df_all.groupby('estado_canje').size().reset_index(name='TOTAL REGISTROS')
+                df_canje.columns = ['ESTADO CANJE', 'TOTAL REGISTROS']
                 st.dataframe(df_canje, hide_index=True, use_container_width=True)
 
             with col_d2:
                 st.subheader("⚠️ Motivos de Informe")
-                df_mot = df_all.groupby('motivo_informe').size().reset_index(name='Total Registros')
+                df_mot = df_all.groupby('motivo_informe').size().reset_index(name='TOTAL REGISTROS')
+                df_mot.columns = ['MOTIVO DE INFORME', 'TOTAL REGISTROS']
                 st.dataframe(df_mot, hide_index=True, use_container_width=True)
 
                 st.subheader("🚚 Avance por Estado de Trámite")
-                df_tram = df_all[df_all['tramite_proveedor'].notnull()].groupby('tramite_proveedor').size().reset_index(name='Total')
+                df_tram = df_all[df_all['tramite_proveedor'].notnull()].groupby('tramite_proveedor').size().reset_index(name='TOTAL')
+                df_tram.columns = ['ESTADO TRÁMITE', 'TOTAL']
                 st.dataframe(df_tram, hide_index=True, use_container_width=True)
 
     # --- GESTIÓN DE USUARIOS (ADMIN) ---
@@ -638,10 +638,10 @@ def render_ui(user_info: dict):
         df_users = pd.read_sql_query("""
             SELECT 
                 id AS ID, 
-                usuario AS "Usuario", 
-                rol AS "Rol", 
-                nombre_completo AS "Nombre Completo", 
-                estado AS "Estado" 
+                usuario AS "USUARIO", 
+                rol AS "ROL", 
+                nombre_completo AS "NOMBRE COMPLETO", 
+                estado AS "ESTADO" 
             FROM usuarios
         """, conn)
         st.dataframe(df_users, hide_index=True, use_container_width=True)
