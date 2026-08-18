@@ -3,7 +3,7 @@ Módulo de Interfaz de Usuario para los 5 Pasos Operativos y Gestión de Usuario
 """
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.database import get_connection
 from src.catalogo import (
     get_catalogo, get_opciones_selectbox, buscar_por_etiqueta,
@@ -44,7 +44,7 @@ def render_ui(user_info: dict):
     
     conn = get_connection()
 
-    # --- PASO 1 (INGRESO + MODIFICACIÓN Y EDICIÓN DE REGISTROS) ---
+    # --- PASO 1 ---
     if tab_seleccionada == "Paso 1: Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
@@ -103,7 +103,7 @@ def render_ui(user_info: dict):
                         st.success("Producto registrado exitosamente en el Paso 1.")
                         st.rerun()
 
-        # PESTAÑA 2: EDITAR / CORREGIR REGISTROS
+        # PESTAÑA 2: EDITAR REGISTROS
         with tab_p1_editar:
             st.subheader("Registros Ingresados en Paso 1 (Modificables)")
             df_p1 = pd.read_sql_query("""
@@ -125,16 +125,12 @@ def render_ui(user_info: dict):
                 st.info("No hay registros pendientes en Paso 1 para modificar.")
             else:
                 st.dataframe(df_p1, hide_index=True)
-                
                 id_mod = st.selectbox("Seleccione ID del registro a Modificar o Eliminar", df_p1['ID'].tolist())
-                
-                # Cargar datos actuales del registro seleccionado
                 prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
                 
                 if prod_data:
                     with st.form("form_editar_p1"):
                         st.markdown(f"**Modificando Registro ID #{id_mod} — {prod_data['descripcion']}**")
-                        
                         col_e1, col_e2 = st.columns(2)
                         with col_e1:
                             idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
@@ -144,15 +140,12 @@ def render_ui(user_info: dict):
                         
                         with col_e2:
                             new_lote = st.text_input("Lote *", value=prod_data['lote'])
-                            
-                            # Manejar fecha
                             try:
                                 fecha_init = datetime.strptime(prod_data['vencimiento'], "%Y-%m-%d").date()
                             except Exception:
                                 fecha_init = datetime.now().date()
                                 
                             new_vencimiento = st.date_input("Fecha de Vencimiento *", value=fecha_init)
-                            
                             motivos_opt = ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
                             idx_mot = motivos_opt.index(prod_data['motivo_informe']) if prod_data['motivo_informe'] in motivos_opt else 0
                             new_motivo = st.selectbox("Motivo de informe *", motivos_opt, index=idx_mot)
@@ -192,7 +185,7 @@ def render_ui(user_info: dict):
             else:
                 st.error(msg)
 
-    # --- PASO 2 ---
+    # --- PASO 2 (Opciones ampliadas en ¿Aplica Canje?) ---
     elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
         df = pd.read_sql_query("""
@@ -212,19 +205,46 @@ def render_ui(user_info: dict):
         if df.empty:
             st.info("No hay productos pendientes en Paso 1.")
         else:
+            hoy = datetime.now().date()
+            
+            def calcular_meses(venc_str):
+                try:
+                    venc = datetime.strptime(str(venc_str), "%Y-%m-%d").date()
+                    dias = (venc - hoy).days
+                    meses = round(dias / 30.44, 1)
+                    return max(0.0, meses)
+                except Exception:
+                    return 0.0
+
+            def calcular_fecha_limite(venc_str):
+                try:
+                    venc = datetime.strptime(str(venc_str), "%Y-%m-%d").date()
+                    limite = venc - timedelta(days=60)
+                    return str(limite)
+                except Exception:
+                    return ""
+
+            df["Meses por Vencer"] = df["Vencimiento"].apply(calcular_meses)
+            df["Fecha Límite Retiro (60 días)"] = df["Vencimiento"].apply(calcular_fecha_limite)
+
             st.dataframe(df, hide_index=True)
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso2"):
-                aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
-                tipo_gestion = st.text_input("Tipo de gestión de canje")
-                obs = st.text_area("Observaciones Paso 2")
+                aplica_canje = st.selectbox(
+                    "¿Aplica Canje? *", 
+                    [
+                        "Aplica", 
+                        "No aplica", 
+                        "Revisión área de registro - producto compra propia"
+                    ]
+                )
                 
                 if st.form_submit_button("Avanzar a Paso 3"):
                     cursor = conn.cursor()
                     cursor.execute("""
-                    UPDATE productos SET estado_canje=?, tipo_gestion_canje=?, fecha_paso2=?, observacion_paso2=?, paso_actual=2 WHERE id=?
-                    """, (aplica_canje, tipo_gestion, str(datetime.now().date()), obs, prod_id))
+                    UPDATE productos SET estado_canje=?, fecha_paso2=?, paso_actual=2 WHERE id=?
+                    """, (aplica_canje, str(datetime.now().date()), prod_id))
                     conn.commit()
                     st.success("Producto avanzado al Paso 3.")
                     st.rerun()
