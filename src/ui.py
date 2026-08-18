@@ -23,8 +23,21 @@ ESTADOS_TRAMITE_PROVEEDOR = [
     "Producto recibido"
 ]
 
-# Lista de bodegas extendida para el Paso 4 (incluye Bodega de Excluidos)
 BODEGAS_PASO4 = BODEGAS_OFICIALES + ["Bodega de Excluidos"]
+
+OPCIONES_DIFUSION_RED = [
+    "No iniciada la difusión",
+    "Ofrecido a la Red",
+    "Aceptado por Establecimiento",
+    "Producto donado"
+]
+
+OPCIONES_REDISTRIBUCION_STOCK = [
+    "Baja mensual CENABAST",
+    "Reprogramación anual CENABAST",
+    "Pedido especial CENABAST",
+    "Consulta de compra"
+]
 
 def render_ui(user_info: dict):
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
@@ -369,7 +382,7 @@ def render_ui(user_info: dict):
                             st.success(f"Estado del trámite para ID #{id_seg} actualizado correctamente.")
                             st.rerun()
 
-    # --- PASO 4 (CON BODEGA DE EXCLUIDOS INCLUIDA) ---
+    # --- PASO 4 ---
     elif tab_seleccionada == "Paso 4: Bulto y Ubicación":
         st.header("📦 Paso 4 — Gestión de Bulto y Ubicaciones")
         df = pd.read_sql_query("""
@@ -404,40 +417,92 @@ def render_ui(user_info: dict):
                     st.success("Producto avanzado al Paso 5.")
                     st.rerun()
 
-    # --- PASO 5 ---
+    # --- PASO 5 (RESOLUCIÓN, CIERRE Y PRODUCTOS SIN CARTA DE CANJE) ---
     elif tab_seleccionada == "Paso 5: Resolución/Cierre":
         st.header("📜 Paso 5 — Resolución y Cierre")
-        df = pd.read_sql_query("""
-            SELECT 
-                id AS ID, 
-                codigo_reyimen AS "Código Reyimen", 
-                descripcion AS "Descripción", 
-                lote AS "Lote", 
-                proveedor AS "Proveedor", 
-                numero_bulto AS "Número Bulto" 
-            FROM productos 
-            WHERE paso_actual = 4 AND estado_global = 'En trámite'
-        """, conn)
         
-        if df.empty:
-            st.info("No hay productos pendientes para cierre.")
-        else:
-            st.dataframe(df, hide_index=True, use_container_width=True)
-            prod_id = st.selectbox("Seleccione ID de Producto a CERRAR", df['ID'].tolist())
+        tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre General de Proceso", "🟢 Productos Sin Carta de Canje"])
+
+        # PESTAÑA 1: CIERRE GENERAL
+        with tab_p5_cierre:
+            df_p5 = pd.read_sql_query("""
+                SELECT 
+                    id AS ID, 
+                    codigo_reyimen AS "Código Reyimen", 
+                    descripcion AS "Descripción", 
+                    lote AS "Lote", 
+                    proveedor AS "Proveedor", 
+                    numero_bulto AS "Número Bulto" 
+                FROM productos 
+                WHERE paso_actual = 4 AND estado_global = 'En trámite'
+            """, conn)
             
-            with st.form("form_paso5"):
-                num_res = st.text_input("Número de Resolución *")
-                estado_fin = st.selectbox("Estado Final *", ["Concluido", "Dado de baja", "Canjeado"])
-                obs = st.text_area("Observaciones Paso 5")
+            if df_p5.empty:
+                st.info("No hay productos pendientes para cierre.")
+            else:
+                st.dataframe(df_p5, hide_index=True, use_container_width=True)
+                prod_id = st.selectbox("Seleccione ID de Producto a CERRAR", df_p5['ID'].tolist())
                 
-                if st.form_submit_button("Finalizar Proceso"):
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                    UPDATE productos SET resolucion_numero=?, estado_final=?, fecha_resolucion=?, observacion_paso5=?, paso_actual=5, estado_global='Concluido' WHERE id=?
-                    """, (num_res, estado_fin, str(datetime.now().date()), obs, prod_id))
-                    conn.commit()
-                    st.success("Producto CONCLUIDO con éxito. Se ha archivado al histórico.")
-                    st.rerun()
+                with st.form("form_paso5"):
+                    num_res = st.text_input("Número de Resolución *")
+                    estado_fin = st.selectbox("Estado Final *", ["Concluido", "Dado de baja", "Canjeado"])
+                    obs = st.text_area("Observaciones Paso 5")
+                    
+                    if st.form_submit_button("Finalizar Proceso"):
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                        UPDATE productos SET resolucion_numero=?, estado_final=?, fecha_resolucion=?, observacion_paso5=?, paso_actual=5, estado_global='Concluido' WHERE id=?
+                        """, (num_res, estado_fin, str(datetime.now().date()), obs, prod_id))
+                        conn.commit()
+                        st.success("Producto CONCLUIDO con éxito. Se ha archivado al histórico.")
+                        st.rerun()
+
+        # PESTAÑA 2: PRODUCTO SIN CARTA DE CANJE (DIFUSIÓN RED Y REDISTRIBUCIÓN STOCK)
+        with tab_p5_sin_canje:
+            st.subheader("🟢 Gestión de Productos Sin Carta de Canje")
+            df_p5_sc = pd.read_sql_query("""
+                SELECT 
+                    id AS ID, 
+                    codigo_reyimen AS "Código", 
+                    descripcion AS "Descripción", 
+                    lote AS "Lote", 
+                    estado_canje AS "Estado Canje",
+                    tipo_gestion_canje AS "Difusión a la Red",
+                    observacion_paso2 AS "Redistribución Stock"
+                FROM productos 
+                WHERE (estado_canje = 'No aplica' OR estado_canje LIKE '%compra propia%') AND estado_global = 'En trámite'
+            """, conn)
+
+            if df_p5_sc.empty:
+                st.info("No hay productos marcados sin carta de canje pendientes de gestión.")
+            else:
+                st.dataframe(df_p5_sc, hide_index=True, use_container_width=True)
+                
+                id_sc = st.selectbox("Seleccione ID de Producto para registrar Difusión o Redistribución", df_p5_sc['ID'].tolist())
+                prod_sc_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
+                
+                if prod_sc_data:
+                    with st.form("form_paso5_sin_canje"):
+                        st.markdown(f"**Gestión de Producto ID #{id_sc} — {prod_sc_data['descripcion']}**")
+                        
+                        col_sc1, col_sc2 = st.columns(2)
+                        with col_sc1:
+                            difusion_sel = st.selectbox("DIFUSIÓN A LA RED *", OPCIONES_DIFUSION_RED)
+                        with col_sc2:
+                            redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK *", OPCIONES_REDISTRIBUCION_STOCK)
+                        
+                        obs_sc = st.text_area("Observaciones / Detalles de la Difusión", value=prod_sc_data['observacion_paso5'] or "")
+
+                        if st.form_submit_button("💾 Guardar Gestión Sin Canje"):
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE productos 
+                                SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=?
+                                WHERE id=?
+                            """, (difusion_sel, redistribucion_sel, obs_sc, id_sc))
+                            conn.commit()
+                            st.success(f"Gestión registrada para el Producto #{id_sc}.")
+                            st.rerun()
 
     # --- HISTÓRICO ---
     elif tab_seleccionada == "Histórico Concluidos":
