@@ -1,6 +1,8 @@
 """
-Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Gestión de Usuarios, Dashboard y Consolidado General.
+Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
+Gestión de Usuarios, Dashboard y Consolidado General.
 """
+import io
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -205,11 +207,44 @@ def render_ui(user_info: dict):
     # --- CARGA MASIVA ---
     elif tab_seleccionada == "Carga Masiva":
         st.header("📤 Carga Masiva de Productos (Paso 1)")
+        
+        st.markdown("### 1. Descargar Plantilla Modelo")
+        st.caption("Descarga la planilla oficial para que el bodeguero complete los datos de pronto vencimiento.")
+        
+        df_plantilla = pd.DataFrame([{
+            "BODEGA ORIGEN": "Bodega AZ09 (Fármacos)",
+            "TIPO PRODUCTO": "Fármaco",
+            "CÓDIGO REYIMEN": "1365",
+            "DESCRIPCIÓN": "BUPIVACAINA 0,50 % SOLUCION INYECTABLE 10 ML",
+            "TIPO COMPRA": "CENABAST",
+            "UNIDAD": "FRASCO",
+            "CANTIDAD": 100,
+            "MOTIVO INFORME": "Gestión pronto vencimiento",
+            "FECHA VENCIMIENTO": "2026-10-31",
+            "LOTE": "L12345"
+        }])
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_plantilla.to_excel(writer, index=False, sheet_name='Plantilla_Carga')
+        excel_data = output.getvalue()
+
+        st.download_button(
+            label="📥 Descargar Plantilla Excel (.xlsx)",
+            data=excel_data,
+            file_name="Plantilla_Carga_Masiva_Bodega.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        st.divider()
+
+        st.markdown("### 2. Subir Archivo Completado")
         uploaded = st.file_uploader("Subir archivo Excel o CSV", type=["xlsx", "xls", "csv"])
-        if uploaded and st.button("Procesar Archivo"):
+        if uploaded and st.button("🚀 Procesar e Ingresar Productos"):
             ok, msg = procesar_carga_masiva(uploaded, user_info['usuario'])
             if ok:
                 st.success(msg)
+                st.rerun()
             else:
                 st.error(msg)
 
