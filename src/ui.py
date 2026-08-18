@@ -11,6 +11,18 @@ from src.catalogo import (
 )
 from src.importer import procesar_carga_masiva
 
+ESTADOS_TRAMITE_PROVEEDOR = [
+    "Correo enviado - En espera de respuesta de proveedor",
+    "Correo enviado - Canje aceptado",
+    "Correo enviado - Canje rechazado",
+    "Correo enviado - En espera de retiro por proveedor",
+    "Bulto retirado por proveedor",
+    "Canje aceptado - En espera de Nota de credito",
+    "Canje aceptado - En espera de reposición del producto",
+    "Nota de credito recibida",
+    "Producto recibido"
+]
+
 def render_ui(user_info: dict):
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
@@ -265,7 +277,7 @@ def render_ui(user_info: dict):
                     st.success("Producto avanzado al Paso 3.")
                     st.rerun()
 
-    # --- PASO 3 (INCLUYE CANTIDAD EN LA TABLA) ---
+    # --- PASO 3 (DESPLEGABLE EN ESTADO DEL TRÁMITE CON PROVEEDOR) ---
     elif tab_seleccionada == "Paso 3: Registro/Proveedor":
         st.header("🚚 Paso 3 — Área de Registro / Proveedor")
         df = pd.read_sql_query("""
@@ -302,7 +314,10 @@ def render_ui(user_info: dict):
                 proveedor = st.selectbox("Proveedor Oficial *", PROVEEDORES_OFICIALES)
                 tipo_doc = st.selectbox("Tipo de Documento *", TIPOS_DOCUMENTO)
                 num_doc = st.text_input("Número de Documento / Orden de Compra *")
-                tramite = st.text_input("Estado del trámite con proveedor")
+                
+                # Desplegable estandarizado para Estado del trámite
+                tramite = st.selectbox("Estado del trámite con proveedor *", ESTADOS_TRAMITE_PROVEEDOR)
+                
                 obs = st.text_area("Observaciones Paso 3")
                 
                 if st.form_submit_button("Avanzar a Paso 4"):
