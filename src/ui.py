@@ -44,7 +44,7 @@ def render_ui(user_info: dict):
     
     conn = get_connection()
 
-    # --- PASO 1 (REACTIVO + MOTIVO + TIPO DE COMPRA) ---
+    # --- PASO 1 (REACTIVO + MOTIVO + TIPO DE COMPRA: CENABAST / COMPRA PROPIA) ---
     if tab_seleccionada == "Paso 1: Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
@@ -71,7 +71,7 @@ def render_ui(user_info: dict):
             with col1:
                 codigo = st.text_input("Código Reyimen *", value=cod_auto)
                 descripcion = st.text_input("Descripción *", value=desc_auto)
-                tipo_compra = st.selectbox("Tipo de compra / Documento *", TIPOS_DOCUMENTO)
+                tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
             
             with col2:
                 unidad = st.text_input("Unidad *", value=unidad_auto)
