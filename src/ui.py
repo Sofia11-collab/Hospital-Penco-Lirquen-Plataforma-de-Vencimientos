@@ -185,7 +185,7 @@ def render_ui(user_info: dict):
             else:
                 st.error(msg)
 
-    # --- PASO 2 (TABLA COMPACTA SIN DESPLAZAMIENTO HORIZONTAL) ---
+    # --- PASO 2 ---
     elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
         df = pd.read_sql_query("""
@@ -227,7 +227,6 @@ def render_ui(user_info: dict):
             df["Meses Vencer"] = df["Vencimiento"].apply(calcular_meses)
             df["Límite Retiro (60d)"] = df["Vencimiento"].apply(calcular_fecha_limite)
 
-            # Configuración de anchos ajustados para visión completa
             st.dataframe(
                 df, 
                 hide_index=True, 
@@ -266,7 +265,7 @@ def render_ui(user_info: dict):
                     st.success("Producto avanzado al Paso 3.")
                     st.rerun()
 
-    # --- PASO 3 ---
+    # --- PASO 3 (INCLUYE CANTIDAD EN LA TABLA) ---
     elif tab_seleccionada == "Paso 3: Registro/Proveedor":
         st.header("🚚 Paso 3 — Área de Registro / Proveedor")
         df = pd.read_sql_query("""
@@ -274,6 +273,7 @@ def render_ui(user_info: dict):
                 id AS ID, 
                 codigo_reyimen AS "Código Reyimen", 
                 descripcion AS "Descripción", 
+                cantidad AS "Cantidad",
                 lote AS "Lote", 
                 estado_canje AS "Estado Canje" 
             FROM productos 
@@ -283,7 +283,19 @@ def render_ui(user_info: dict):
         if df.empty:
             st.info("No hay productos pendientes para gestionar con proveedor.")
         else:
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            st.dataframe(
+                df, 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={
+                    "ID": st.column_config.NumberColumn(width="small"),
+                    "Código Reyimen": st.column_config.TextColumn(width="small"),
+                    "Descripción": st.column_config.TextColumn(width="large"),
+                    "Cantidad": st.column_config.NumberColumn(width="small"),
+                    "Lote": st.column_config.TextColumn(width="small"),
+                    "Estado Canje": st.column_config.TextColumn(width="medium"),
+                }
+            )
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso3"):
