@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard, Consolidado General y Personalización de Tema.
+Gestión de Usuarios, Dashboard, Consolidado General (con Histórico Integrado) y Personalización de Tema.
 """
 import io
 import streamlit as st
@@ -145,7 +145,7 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
-    # Menú de pestañas según rol
+    # Menú de pestañas según rol (Histórico Unificado en Consolidado General)
     tabs_disponibles = []
     if rol in ["admin", "bodega"]:
         tabs_disponibles.append("Paso 1: Informe Bodega")
@@ -159,7 +159,6 @@ def render_ui(user_info: dict):
     if rol in ["admin", "jefatura"]:
         tabs_disponibles.append("Paso 5: Resolución/Cierre")
     
-    tabs_disponibles.append("Histórico Concluidos")
     tabs_disponibles.append("🔍 Consolidado General")
     tabs_disponibles.append("📊 Dashboard / Análisis")
     
@@ -661,70 +660,88 @@ def render_ui(user_info: dict):
                             st.success(f"Gestión registrada para el Producto #{id_sc}.")
                             st.rerun()
 
-    # --- HISTÓRICO ---
-    elif tab_seleccionada == "Histórico Concluidos":
-        st.header("📁 Registros Históricos Concluidos")
-        df = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
-        st.dataframe(df, hide_index=True, use_container_width=True)
-
-    # --- CONSOLIDADO GENERAL ---
+    # --- CONSOLIDADO GENERAL (CON HISTÓRICO UNIFICADO) ---
     elif tab_seleccionada == "🔍 Consolidado General":
         st.header("🔍 Consolidado General de Todos los Productos")
         
-        df_cons = pd.read_sql_query("SELECT * FROM productos", conn)
-        
-        if df_cons.empty:
-            st.info("No hay productos registrados en el sistema.")
-        else:
-            def determinar_estado_general(row):
-                if row['estado_global'] == 'Concluido':
-                    return f"Concluido ({row['estado_final'] or 'Archivado'})"
-                
-                paso = row['paso_actual']
-                if paso == 1:
-                    return "Paso 1: Nuevo / Pendiente Jefatura"
-                elif paso == 2:
-                    return f"Paso 2: Canje Jefatura ({row['estado_canje'] or 'En evaluación'})"
-                elif paso == 3:
-                    return f"Paso 3: Trámite Proveedor ({row['tramite_proveedor'] or 'En gestión'})"
-                elif paso == 4:
-                    return "Paso 4: Bulto Asignado / Pendiente Cierre"
-                else:
-                    return "En trámite"
+        tab_cons_todos, tab_cons_historico = st.tabs(["🌐 Todos los Productos", "📁 Histórico Concluidos"])
 
-            df_cons['Estado Actual del Producto'] = df_cons.apply(determinar_estado_general, axis=1)
+        # PESTAÑA 1: TODOS LOS PRODUCTOS
+        with tab_cons_todos:
+            df_cons = pd.read_sql_query("SELECT * FROM productos", conn)
+            
+            if df_cons.empty:
+                st.info("No hay productos registrados en el sistema.")
+            else:
+                def determinar_estado_general(row):
+                    if row['estado_global'] == 'Concluido':
+                        return f"Concluido ({row['estado_final'] or 'Archivado'})"
+                    
+                    paso = row['paso_actual']
+                    if paso == 1:
+                        return "Paso 1: Nuevo / Pendiente Jefatura"
+                    elif paso == 2:
+                        return f"Paso 2: Canje Jefatura ({row['estado_canje'] or 'En evaluación'})"
+                    elif paso == 3:
+                        return f"Paso 3: Trámite Proveedor ({row['tramite_proveedor'] or 'En gestión'})"
+                    elif paso == 4:
+                        return "Paso 4: Bulto Asignado / Pendiente Cierre"
+                    else:
+                        return "En trámite"
 
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                search_text = st.text_input("🔎 Buscar por Descripción, Código Reyimen o Lote")
-            with col_f2:
-                estado_filtro = st.selectbox(
-                    "Filtrar por Estado Global", 
-                    ["Todos", "En trámite", "Concluido"]
-                )
+                df_cons['Estado Actual del Producto'] = df_cons.apply(determinar_estado_general, axis=1)
 
-            if estado_filtro != "Todos":
-                df_cons = df_cons[df_cons['estado_global'] == estado_filtro]
-                
-            if search_text:
-                mask = (
-                    df_cons['descripcion'].str.contains(search_text, case=False, na=False) |
-                    df_cons['codigo_reyimen'].str.contains(search_text, case=False, na=False) |
-                    df_cons['lote'].str.contains(search_text, case=False, na=False)
-                )
-                df_cons = df_cons[mask]
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    search_text = st.text_input("🔎 Buscar por Descripción, Código Reyimen o Lote")
+                with col_f2:
+                    estado_filtro = st.selectbox(
+                        "Filtrar por Estado Global", 
+                        ["Todos", "En trámite", "Concluido"]
+                    )
 
-            df_mostrar = df_cons[[
-                'id', 'codigo_reyimen', 'descripcion', 'bodega_origen', 
-                'cantidad', 'lote', 'vencimiento', 'Estado Actual del Producto', 'proveedor'
-            ]].copy()
+                if estado_filtro != "Todos":
+                    df_cons = df_cons[df_cons['estado_global'] == estado_filtro]
+                    
+                if search_text:
+                    mask = (
+                        df_cons['descripcion'].str.contains(search_text, case=False, na=False) |
+                        df_cons['codigo_reyimen'].str.contains(search_text, case=False, na=False) |
+                        df_cons['lote'].str.contains(search_text, case=False, na=False)
+                    )
+                    df_cons = df_cons[mask]
 
-            df_mostrar.columns = [
-                'ID', 'CÓDIGO REYIMEN', 'DESCRIPCIÓN', 'BODEGA ORIGEN', 
-                'CANTIDAD', 'LOTE', 'VENCIMIENTO', 'ESTADO ACTUAL', 'PROVEEDOR'
-            ]
+                df_mostrar = df_cons[[
+                    'id', 'codigo_reyimen', 'descripcion', 'bodega_origen', 
+                    'cantidad', 'lote', 'vencimiento', 'Estado Actual del Producto', 'proveedor'
+                ]].copy()
 
-            st.dataframe(df_mostrar, hide_index=True, use_container_width=True)
+                df_mostrar.columns = [
+                    'ID', 'CÓDIGO REYIMEN', 'DESCRIPCIÓN', 'BODEGA ORIGEN', 
+                    'CANTIDAD', 'LOTE', 'VENCIMIENTO', 'ESTADO ACTUAL', 'PROVEEDOR'
+                ]
+
+                st.dataframe(df_mostrar, hide_index=True, use_container_width=True)
+
+        # PESTAÑA 2: HISTÓRICO CONCLUIDOS INTEGRADO
+        with tab_cons_historico:
+            st.subheader("📁 Registros Históricos Concluidos y Archivados")
+            df_hist = pd.read_sql_query("SELECT * FROM productos WHERE estado_global = 'Concluido'", conn)
+            
+            if df_hist.empty:
+                st.info("No hay trámites concluidos en el histórico.")
+            else:
+                df_hist_mostrar = df_hist[[
+                    'id', 'codigo_reyimen', 'descripcion', 'bodega_origen', 
+                    'cantidad', 'lote', 'vencimiento', 'estado_final', 'resolucion_numero', 'fecha_resolucion'
+                ]].copy()
+
+                df_hist_mostrar.columns = [
+                    'ID', 'CÓDIGO REYIMEN', 'DESCRIPCIÓN', 'BODEGA ORIGEN', 
+                    'CANTIDAD', 'LOTE', 'VENCIMIENTO', 'ESTADO FINAL', 'N° RESOLUCIÓN', 'FECHA CIERRE'
+                ]
+
+                st.dataframe(df_hist_mostrar, hide_index=True, use_container_width=True)
 
     # --- DASHBOARD / ANÁLISIS ---
     elif tab_seleccionada == "📊 Dashboard / Análisis":
