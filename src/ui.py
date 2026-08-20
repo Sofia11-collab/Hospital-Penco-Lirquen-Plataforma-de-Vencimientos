@@ -3,6 +3,7 @@ Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
 Gestión de Usuarios, Dashboard, Consolidado General (con Histórico Integrado) y Personalización de Tema Claro.
 """
 import io
+import os
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -150,6 +151,15 @@ def render_ui(user_info: dict):
     if tema_actual not in opciones_temas:
         tema_actual = "Claro (Predeterminado)"
         st.session_state["tema_seleccionado"] = tema_actual
+
+    # Mostrar Logo en el Sidebar desde assets
+    path1 = "assets/hospital-penco-lirquen.png"
+    path2 = "assets/logo.png"
+
+    if os.path.exists(path1):
+        st.sidebar.image(path1, width=150)
+    elif os.path.exists(path2):
+        st.sidebar.image(path2, width=150)
 
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
