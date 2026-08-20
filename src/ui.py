@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard, Consolidado General (con Histórico Integrado) y Personalización de Tema.
+Gestión de Usuarios, Dashboard, Consolidado General (con Histórico Integrado) y Personalización de Tema Claro.
 """
 import io
 import streamlit as st
@@ -41,80 +41,82 @@ OPCIONES_REDISTRIBUCION_STOCK = [
     "Consulta de compra"
 ]
 
-# Colores de fondo personalizados con alto contraste
-TEMAS_COLOR = {
-    "Oscuro (Predeterminado)": {"bg": "#0e1117", "card": "#161b22", "text": "#ffffff"},
-    "Azul": {"bg": "#0d1b2a", "card": "#1b263b", "text": "#ffffff"},
-    "Rojo": {"bg": "#2b090a", "card": "#4a0e17", "text": "#ffffff"},
-    "Amarillo": {"bg": "#2b2600", "card": "#423b00", "text": "#ffffff"},
-    "Violeta": {"bg": "#1b0b1b", "card": "#331333", "text": "#ffffff"},
-    "Verde": {"bg": "#0a1f13", "card": "#143322", "text": "#ffffff"},
-    "Rosado": {"bg": "#2b0a1d", "card": "#4a1233", "text": "#ffffff"}
+# Colores de fondo CLAROS personalizados
+TEMAS_COLOR_CLAROS = {
+    "Claro (Predeterminado)": {"bg": "#f8f9fa", "card": "#ffffff", "text": "#1a1d20", "border": "#dee2e6"},
+    "Azul Pastel": {"bg": "#edf2f7", "card": "#e2e8f0", "text": "#0f172a", "border": "#cbd5e1"},
+    "Rojo Suave": {"bg": "#fef2f2", "card": "#fee2e2", "text": "#450a0a", "border": "#fca5a5"},
+    "Amarillo / Crema": {"bg": "#fefce8", "card": "#fef08a", "text": "#422006", "border": "#fde047"},
+    "Violeta Lavanda": {"bg": "#faf5ff", "card": "#f3e8ff", "text": "#3b0764", "border": "#d8b4fe"},
+    "Verde Menta": {"bg": "#f0fdf4", "card": "#dcfce7", "text": "#052e16", "border": "#86efac"},
+    "Rosado Pastel": {"bg": "#fdf2f8", "card": "#fce7f3", "text": "#500724", "border": "#fbcfe8"}
 }
 
 def aplicar_estilo_tema(nombre_tema):
-    tema = TEMAS_COLOR.get(nombre_tema, TEMAS_COLOR["Oscuro (Predeterminado)"])
+    tema = TEMAS_COLOR_CLAROS.get(nombre_tema, TEMAS_COLOR_CLAROS["Claro (Predeterminado)"])
     css = f"""
     <style>
         /* Fondo general de la app */
         .stApp {{
             background-color: {tema['bg']} !important;
-            color: #ffffff !important;
+            color: {tema['text']} !important;
         }}
         
         /* Fondo del Sidebar */
         [data-testid="stSidebar"] {{
             background-color: {tema['card']} !important;
+            border-right: 1px solid {tema['border']} !important;
         }}
         
         /* Texto en Sidebar y Radio Buttons de navegación */
         [data-testid="stSidebar"] *, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {{
-            color: #ffffff !important;
-            font-weight: 500 !important;
+            color: {tema['text']} !important;
+            font-weight: 600 !important;
         }}
         
         /* Textos generales, títulos y etiquetas */
         .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{
-            color: #ffffff !important;
+            color: {tema['text']} !important;
         }}
 
-        /* Corrección para la etiqueta de Rol (código inline en sidebar) */
+        /* Etiqueta de Rol */
         [data-testid="stSidebar"] code {{
-            background-color: #0f381e !important;
-            color: #25d366 !important;
-            border: 1px solid #1f6e38 !important;
+            background-color: #dcfce7 !important;
+            color: #15803d !important;
+            border: 1px solid #86efac !important;
             font-weight: bold !important;
             padding: 2px 8px !important;
             border-radius: 4px !important;
         }}
 
-        /* Corrección de visibilidad para Selectbox (listas desplegables) */
-        [data-testid="stSidebar"] div[data-baseweb="select"] > div {{
-            background-color: #21262d !important;
-            color: #ffffff !important;
-            border: 1px solid #30363d !important;
+        /* Cajas desplegables (Selectbox) e Inputs */
+        div[data-baseweb="select"] > div, .stTextInput > div > div > input, .stNumberInput > div > div > input {{
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
         }}
 
-        [data-testid="stSidebar"] div[data-baseweb="select"] span {{
-            color: #ffffff !important;
+        div[data-baseweb="select"] span {{
+            color: #0f172a !important;
         }}
         
-        /* Botones generales, de descarga y de subida de archivos */
+        /* Botones estándar y de descarga */
         .stButton button, .stDownloadButton button, [data-testid="stFileUploader"] button {{
-            background-color: #21262d !important;
-            color: #ffffff !important;
-            border: 1px solid #8b949e !important;
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
             font-weight: bold !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
         }}
 
         .stButton button *, .stDownloadButton button *, [data-testid="stFileUploader"] button * {{
-            color: #ffffff !important;
+            color: #0f172a !important;
         }}
         
-        /* Botones dentro de formularios (form_submit_button) */
+        /* Botones de Formularios */
         div[data-testid="stForm"] button {{
-            background-color: #21262d !important;
-            border: 1px solid #8b949e !important;
+            background-color: #0284c7 !important;
+            border: 1px solid #0369a1 !important;
         }}
 
         div[data-testid="stForm"] button *, div[data-testid="stForm"] button p, div[data-testid="stForm"] button span {{
@@ -123,19 +125,18 @@ def aplicar_estilo_tema(nombre_tema):
             font-size: 15px !important;
         }}
 
-        div[data-testid="stForm"] button:hover, .stDownloadButton button:hover, .stButton button:hover {{
-            background-color: #30363d !important;
-            border-color: #58a6ff !important;
+        div[data-testid="stForm"] button:hover {{
+            background-color: #0369a1 !important;
         }}
 
-        /* Texto de subida de archivos */
+        /* Área de subida de archivos */
         [data-testid="stFileUploader"] section {{
-            background-color: #161b22 !important;
-            border: 1px dashed #8b949e !important;
+            background-color: #ffffff !important;
+            border: 2px dashed #cbd5e1 !important;
         }}
 
         [data-testid="stFileUploader"] section * {{
-            color: #c9d1d9 !important;
+            color: #334155 !important;
         }}
     </style>
     """
@@ -143,15 +144,15 @@ def aplicar_estilo_tema(nombre_tema):
 
 def render_ui(user_info: dict):
     if "tema_seleccionado" not in st.session_state:
-        st.session_state["tema_seleccionado"] = "Oscuro (Predeterminado)"
+        st.session_state["tema_seleccionado"] = "Claro (Predeterminado)"
 
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
     
     tema_sel = st.sidebar.selectbox(
         "🎨 Color de Fondo", 
-        list(TEMAS_COLOR.keys()),
-        index=list(TEMAS_COLOR.keys()).index(st.session_state["tema_seleccionado"])
+        list(TEMAS_COLOR_CLAROS.keys()),
+        index=list(TEMAS_COLOR_CLAROS.keys()).index(st.session_state["tema_seleccionado"])
     )
     st.session_state["tema_seleccionado"] = tema_sel
     aplicar_estilo_tema(tema_sel)
@@ -162,7 +163,7 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
-    # Menú de pestañas según rol (Histórico Unificado en Consolidado General)
+    # Menú de pestañas según rol
     tabs_disponibles = []
     if rol in ["admin", "bodega"]:
         tabs_disponibles.append("Paso 1: Informe Bodega")
