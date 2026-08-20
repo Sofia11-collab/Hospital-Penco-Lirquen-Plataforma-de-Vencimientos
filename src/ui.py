@@ -143,16 +143,22 @@ def aplicar_estilo_tema(nombre_tema):
     st.markdown(css, unsafe_allow_html=True)
 
 def render_ui(user_info: dict):
-    if "tema_seleccionado" not in st.session_state:
-        st.session_state["tema_seleccionado"] = "Claro (Predeterminado)"
+    # Verificación segura del tema seleccionado
+    opciones_temas = list(TEMAS_COLOR_CLAROS.keys())
+    tema_actual = st.session_state.get("tema_seleccionado", "Claro (Predeterminado)")
+    
+    if tema_actual not in opciones_temas:
+        tema_actual = "Claro (Predeterminado)"
+        st.session_state["tema_seleccionado"] = tema_actual
 
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
     
+    idx_tema = opciones_temas.index(tema_actual)
     tema_sel = st.sidebar.selectbox(
         "🎨 Color de Fondo", 
-        list(TEMAS_COLOR_CLAROS.keys()),
-        index=list(TEMAS_COLOR_CLAROS.keys()).index(st.session_state["tema_seleccionado"])
+        opciones_temas,
+        index=idx_tema
     )
     st.session_state["tema_seleccionado"] = tema_sel
     aplicar_estilo_tema(tema_sel)
