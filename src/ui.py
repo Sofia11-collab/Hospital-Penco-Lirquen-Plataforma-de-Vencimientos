@@ -41,37 +41,61 @@ OPCIONES_REDISTRIBUCION_STOCK = [
     "Consulta de compra"
 ]
 
-# Colores de fondo personalizados
+# Colores de fondo personalizados con alto contraste
 TEMAS_COLOR = {
-    "Oscuro (Predeterminado)": {"bg": "#0e1117", "card": "#262730", "text": "#ffffff"},
-    "Azul": {"bg": "#102a43", "card": "#183b56", "text": "#f0f4f8"},
-    "Rojo": {"bg": "#3d0c11", "card": "#5c131a", "text": "#fff5f5"},
-    "Amarillo": {"bg": "#3a3000", "card": "#544600", "text": "#fffbea"},
-    "Violeta": {"bg": "#231123", "card": "#381a38", "text": "#f7f0f7"},
-    "Verde": {"bg": "#0f2f1d", "card": "#1a472a", "text": "#f0fff4"},
-    "Rosado": {"bg": "#3b1225", "card": "#541b36", "text": "#fff0f5"}
+    "Oscuro (Predeterminado)": {"bg": "#0e1117", "card": "#161b22", "text": "#ffffff"},
+    "Azul": {"bg": "#0d1b2a", "card": "#1b263b", "text": "#ffffff"},
+    "Rojo": {"bg": "#2b090a", "card": "#4a0e17", "text": "#ffffff"},
+    "Amarillo": {"bg": "#2b2600", "card": "#423b00", "text": "#ffffff"},
+    "Violeta": {"bg": "#1b0b1b", "card": "#331333", "text": "#ffffff"},
+    "Verde": {"bg": "#0a1f13", "card": "#143322", "text": "#ffffff"},
+    "Rosado": {"bg": "#2b0a1d", "card": "#4a1233", "text": "#ffffff"}
 }
 
 def aplicar_estilo_tema(nombre_tema):
     tema = TEMAS_COLOR.get(nombre_tema, TEMAS_COLOR["Oscuro (Predeterminado)"])
     css = f"""
     <style>
+        /* Fondo general de la app */
         .stApp {{
             background-color: {tema['bg']} !important;
-            color: {tema['text']} !important;
+            color: #ffffff !important;
         }}
+        
+        /* Fondo del Sidebar */
         [data-testid="stSidebar"] {{
             background-color: {tema['card']} !important;
         }}
-        .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label {{
-            color: {tema['text']} !important;
+        
+        /* Texto en Sidebar y Radio Buttons de navegación */
+        [data-testid="stSidebar"] *, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {{
+            color: #ffffff !important;
+            font-weight: 500 !important;
+        }}
+        
+        /* Textos generales, títulos y etiquetas */
+        .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{
+            color: #ffffff !important;
+        }}
+        
+        /* Botones de acción y cerrar sesión */
+        .stButton button {{
+            background-color: #21262d !important;
+            color: #ffffff !important;
+            border: 1px solid #30363d !important;
+            font-weight: bold !important;
+        }}
+        
+        /* Hover en botones */
+        .stButton button:hover {{
+            background-color: #30363d !important;
+            border-color: #8b949e !important;
         }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
 def render_ui(user_info: dict):
-    # Selector de tema en la barra lateral
     if "tema_seleccionado" not in st.session_state:
         st.session_state["tema_seleccionado"] = "Oscuro (Predeterminado)"
 
