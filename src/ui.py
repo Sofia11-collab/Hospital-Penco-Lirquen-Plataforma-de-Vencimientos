@@ -77,6 +77,27 @@ def aplicar_estilo_tema(nombre_tema):
         .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{
             color: #ffffff !important;
         }}
+
+        /* Corrección para la etiqueta de Rol (código inline en sidebar) */
+        [data-testid="stSidebar"] code {{
+            background-color: #0f381e !important;
+            color: #25d366 !important;
+            border: 1px solid #1f6e38 !important;
+            font-weight: bold !important;
+            padding: 2px 8px !important;
+            border-radius: 4px !important;
+        }}
+
+        /* Corrección de visibilidad para Selectbox (listas desplegables) */
+        [data-testid="stSidebar"] div[data-baseweb="select"] > div {{
+            background-color: #21262d !important;
+            color: #ffffff !important;
+            border: 1px solid #30363d !important;
+        }}
+
+        [data-testid="stSidebar"] div[data-baseweb="select"] span {{
+            color: #ffffff !important;
+        }}
         
         /* Botones de acción y cerrar sesión */
         .stButton button {{
