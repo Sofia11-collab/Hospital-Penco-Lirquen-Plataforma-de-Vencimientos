@@ -99,26 +99,43 @@ def aplicar_estilo_tema(nombre_tema):
             color: #ffffff !important;
         }}
         
-        /* Botones generales */
-        .stButton button {{
+        /* Botones generales, de descarga y de subida de archivos */
+        .stButton button, .stDownloadButton button, [data-testid="stFileUploader"] button {{
             background-color: #21262d !important;
             color: #ffffff !important;
-            border: 1px solid #30363d !important;
+            border: 1px solid #8b949e !important;
             font-weight: bold !important;
+        }}
+
+        .stButton button *, .stDownloadButton button *, [data-testid="stFileUploader"] button * {{
+            color: #ffffff !important;
         }}
         
         /* Botones dentro de formularios (form_submit_button) */
-        div[data-testid="stForm"] button, div[data-testid="stForm"] button p, div[data-testid="stForm"] button span {{
-            background-color: #f0f6fc !important;
-            color: #0d1117 !important;
+        div[data-testid="stForm"] button {{
+            background-color: #21262d !important;
             border: 1px solid #8b949e !important;
+        }}
+
+        div[data-testid="stForm"] button *, div[data-testid="stForm"] button p, div[data-testid="stForm"] button span {{
+            color: #ffffff !important;
             font-weight: bold !important;
             font-size: 15px !important;
         }}
 
-        div[data-testid="stForm"] button:hover {{
-            background-color: #ffffff !important;
-            border-color: #ffffff !important;
+        div[data-testid="stForm"] button:hover, .stDownloadButton button:hover, .stButton button:hover {{
+            background-color: #30363d !important;
+            border-color: #58a6ff !important;
+        }}
+
+        /* Texto de subida de archivos */
+        [data-testid="stFileUploader"] section {{
+            background-color: #161b22 !important;
+            border: 1px dashed #8b949e !important;
+        }}
+
+        [data-testid="stFileUploader"] section * {{
+            color: #c9d1d9 !important;
         }}
     </style>
     """
