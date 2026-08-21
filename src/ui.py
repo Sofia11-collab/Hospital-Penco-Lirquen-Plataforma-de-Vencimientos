@@ -140,6 +140,28 @@ def aplicar_estilo_tema(nombre_tema):
             border-radius: 4px !important;
         }}
 
+        /* =========================================================
+           BOTÓN PARA EXPANDIR LA BARRA LATERAL (FLECHITA)
+           ========================================================= */
+        [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {{
+            opacity: 1 !important;
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important;
+            color: #0f172a !important;
+            transition: all 0.3s ease;
+            z-index: 999999 !important;
+        }}
+        [data-testid="collapsedControl"]:hover, [data-testid="stSidebarCollapsedControl"]:hover {{
+            background-color: #f1f5f9 !important;
+            border-color: #94a3b8 !important;
+        }}
+        [data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg {{
+            fill: #0f172a !important;
+            color: #0f172a !important;
+        }}
+
         /* FONDO BLANCO PARA TODOS LOS TIPOS DE INPUTS */
         div[data-baseweb="select"] > div, 
         .stTextInput div[data-baseweb="input"], 
