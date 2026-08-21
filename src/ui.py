@@ -100,6 +100,16 @@ def aplicar_estilo_tema(nombre_tema):
         div[data-baseweb="select"] span {{
             color: #0f172a !important;
         }}
+
+        /* Menú desplegable interno (Lista de opciones) */
+        ul[data-testid="stSelectboxVirtualDropdown"] {{
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }}
+        
+        ul[data-testid="stSelectboxVirtualDropdown"] li {{
+            color: #0f172a !important;
+        }}
         
         /* Botones estándar y de descarga */
         .stButton button, .stDownloadButton button, [data-testid="stFileUploader"] button {{
@@ -161,7 +171,7 @@ def aplicar_estilo_tema(nombre_tema):
     st.markdown(css, unsafe_allow_html=True)
 
 def render_ui(user_info: dict):
-    # Verificación segura del tema seleccionado
+    # 1. Verificación segura del tema en memoria
     opciones_temas = list(TEMAS_COLOR_CLAROS.keys())
     tema_actual = st.session_state.get("tema_seleccionado", "Claro (Predeterminado)")
     
@@ -169,11 +179,9 @@ def render_ui(user_info: dict):
         tema_actual = "Claro (Predeterminado)"
         st.session_state["tema_seleccionado"] = tema_actual
 
-    # Estilos aplicados
     idx_tema = opciones_temas.index(tema_actual)
-    aplicar_estilo_tema(tema_actual)
 
-    # Mostrar Logo Centrado, sin caja blanca, y más pequeño (width=130)
+    # 2. Mostrar Logo en el Sidebar
     path1 = "assets/hospital-penco-lirquen.png"
     path2 = "assets/logo.png"
 
@@ -185,12 +193,16 @@ def render_ui(user_info: dict):
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
     
+    # 3. Selector de color (Streamlit capta el nuevo valor aquí instantáneamente)
     tema_sel = st.sidebar.selectbox(
         "🎨 Color de Fondo", 
         opciones_temas,
         index=idx_tema
     )
+    
+    # 4. Guardamos en sesión el NUEVO valor y aplicamos el estilo AL FINAL
     st.session_state["tema_seleccionado"] = tema_sel
+    aplicar_estilo_tema(tema_sel)
     
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["logged_in"] = False
