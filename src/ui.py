@@ -1,10 +1,10 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura (Top Bar compacto).
+Gestión de Usuarios (Crear, Editar, Eliminar), Dashboard, Consolidado General e Interfaz Segura.
 """
 import io
 import os
-import time  # <-- NUEVA LIBRERÍA AGREGADA PARA LA PAUSA VISUAL
+import time
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -98,6 +98,23 @@ def aplicar_estilo_tema(nombre_tema):
             font-weight: 600 !important;
         }}
         
+        /* DISEÑO DE MENÚ DE NAVEGACIÓN MODERNO (Radio Buttons) */
+        [data-testid="stSidebar"] div[role="radiogroup"] > label {{
+            padding: 10px 12px;
+            background-color: transparent;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            transition: all 0.2s ease;
+        }}
+        [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {{
+            background-color: rgba(0, 0, 0, 0.04);
+            transform: translateX(4px);
+        }}
+        /* Círculo del menú más sutil */
+        [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {{
+            transform: scale(0.85);
+        }}
+
         /* Textos generales, títulos y etiquetas */
         .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{
             color: {tema['text']} !important;
@@ -238,32 +255,33 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
-    # Menú de pestañas según rol
+    # --- MENÚ DE NAVEGACIÓN ESTILIZADO CON EMOJIS (Textos Cortos) ---
     tabs_disponibles = []
     if rol in ["admin", "bodega"]:
-        tabs_disponibles.append("Paso 1: Informe Bodega")
-        tabs_disponibles.append("Carga Masiva")
+        tabs_disponibles.append("📋 1. Informe Bodega")
+        tabs_disponibles.append("📤 Carga Masiva")
     if rol in ["admin", "jefatura"]:
-        tabs_disponibles.append("Paso 2: Canjes (Jefatura)")
+        tabs_disponibles.append("⚖️ 2. Canjes (Jefatura)")
     if rol in ["admin", "registro"]:
-        tabs_disponibles.append("Paso 3: Registro/Proveedor")
+        tabs_disponibles.append("🚚 3. Registro/Prov.")
     if rol in ["admin", "bodega"]:
-        tabs_disponibles.append("Paso 4: Bulto y Ubicación")
+        tabs_disponibles.append("📦 4. Bulto/Ubicación")
     if rol in ["admin", "jefatura"]:
-        tabs_disponibles.append("Paso 5: Resolución/Cierre")
+        tabs_disponibles.append("📜 5. Resolución/Cierre")
     
     tabs_disponibles.append("🔍 Consolidado General")
     tabs_disponibles.append("📊 Dashboard / Análisis")
     
     if rol == "admin":
-        tabs_disponibles.append("Gestión de Usuarios")
+        tabs_disponibles.append("👥 Gestión de Usuarios")
 
-    tab_seleccionada = st.sidebar.radio("Navegación", tabs_disponibles)
+    # label_visibility="collapsed" oculta la palabra "Navegación"
+    tab_seleccionada = st.sidebar.radio("Navegación", tabs_disponibles, label_visibility="collapsed")
     
     conn = get_connection()
 
     # --- PASO 1 ---
-    if tab_seleccionada == "Paso 1: Informe Bodega":
+    if tab_seleccionada == "📋 1. Informe Bodega":
         st.header("📋 Paso 1 — Informe de Bodega")
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
@@ -312,7 +330,6 @@ def render_ui(user_info: dict):
                         st.error("Complete todos los campos obligatorios (*)")
                     else:
                         cursor = conn.cursor()
-                        # --- MEDIDA DE SEGURIDAD 1: VERIFICAR DUPLICADOS ---
                         cursor.execute("""
                             SELECT id FROM productos 
                             WHERE codigo_reyimen=? AND lote=? AND bodega_origen=? AND estado_global='En trámite'
@@ -330,7 +347,6 @@ def render_ui(user_info: dict):
                             conn.commit()
                             
                             st.success("✅ Producto registrado exitosamente en el Paso 1.")
-                            # --- MEDIDA DE SEGURIDAD 2: PAUSA PARA QUE EL USUARIO VEA EL MENSAJE ---
                             time.sleep(1.5)
                             st.rerun()
 
@@ -407,7 +423,7 @@ def render_ui(user_info: dict):
                             st.rerun()
 
     # --- CARGA MASIVA ---
-    elif tab_seleccionada == "Carga Masiva":
+    elif tab_seleccionada == "📤 Carga Masiva":
         st.header("📤 Carga Masiva de Productos (Paso 1)")
         
         st.markdown("### 1. Descargar Plantilla Modelo")
@@ -462,18 +478,14 @@ def render_ui(user_info: dict):
                         max_len = len(val_str)
                 ws.column_dimensions[col_letter].width = max(max_len + 5, 18)
 
-            # --- APLICACIÓN DE VALIDACIÓN DE DATOS (LISTAS DESPLEGABLES) ---
-            # 1. Validación para TIPO PRODUCTO (Columna B)
             dv_tipo = DataValidation(type="list", formula1='"Fármaco,Insumo"', allow_blank=True, showDropDown=True)
             ws.add_data_validation(dv_tipo)
             dv_tipo.add("B2:B2000")
 
-            # 2. Validación para TIPO COMPRA (Columna E)
             dv_compra = DataValidation(type="list", formula1='"CENABAST,Compra propia"', allow_blank=True, showDropDown=True)
             ws.add_data_validation(dv_compra)
             dv_compra.add("E2:E2000")
 
-            # 3. Validación para MOTIVO INFORME (Columna H)
             dv_motivo = DataValidation(type="list", formula1='"Gestión pronto vencimiento,Alerta Sanitaria,Falla de calidad"', allow_blank=True, showDropDown=True)
             ws.add_data_validation(dv_motivo)
             dv_motivo.add("H2:H2000")
@@ -501,7 +513,7 @@ def render_ui(user_info: dict):
                 st.error(msg)
 
     # --- PASO 2 ---
-    elif tab_seleccionada == "Paso 2: Canjes (Jefatura)":
+    elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
         df = pd.read_sql_query("""
             SELECT 
@@ -582,7 +594,7 @@ def render_ui(user_info: dict):
                     st.rerun()
 
     # --- PASO 3 ---
-    elif tab_seleccionada == "Paso 3: Registro/Proveedor":
+    elif tab_seleccionada == "🚚 3. Registro/Prov.":
         st.header("🚚 Paso 3 — Área de Registro / Proveedor")
         
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso (Paso 2)", "🔄 Seguimiento y Actualización de Trámites"])
@@ -671,7 +683,7 @@ def render_ui(user_info: dict):
                             st.rerun()
 
     # --- PASO 4 ---
-    elif tab_seleccionada == "Paso 4: Bulto y Ubicación":
+    elif tab_seleccionada == "📦 4. Bulto/Ubicación":
         st.header("📦 Paso 4 — Gestión de Bulto y Ubicaciones")
         df = pd.read_sql_query("""
             SELECT 
@@ -707,7 +719,7 @@ def render_ui(user_info: dict):
                     st.rerun()
 
     # --- PASO 5 ---
-    elif tab_seleccionada == "Paso 5: Resolución/Cierre":
+    elif tab_seleccionada == "📜 5. Resolución/Cierre":
         st.header("📜 Paso 5 — Resolución y Cierre")
         
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre General de Proceso", "🟢 Productos Sin Carta de Canje"])
@@ -925,7 +937,7 @@ def render_ui(user_info: dict):
                 st.dataframe(df_tram, hide_index=True, use_container_width=True)
 
     # --- GESTIÓN DE USUARIOS (ADMIN) ---
-    elif tab_seleccionada == "Gestión de Usuarios":
+    elif tab_seleccionada == "👥 Gestión de Usuarios":
         st.header("👥 Módulo de Gestión de Usuarios")
         
         tab_crear, tab_editar = st.tabs(["➕ Crear Usuario", "✏️ Editar / Eliminar Usuario"])
