@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura (Top Bar personalizado).
+Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura (Top Bar compacto).
 """
 import io
 import os
@@ -73,6 +73,12 @@ def aplicar_estilo_tema(nombre_tema):
             display: none !important;
         }}
 
+        /* REDUCIR ESPACIOS BLANCOS SUPERIORES E INFERIORES */
+        .block-container {{
+            padding-top: 1.5rem !important;
+            padding-bottom: 1.5rem !important;
+        }}
+
         /* Fondo general de la app */
         .stApp {{
             background-color: {tema['bg']} !important;
@@ -94,6 +100,11 @@ def aplicar_estilo_tema(nombre_tema):
         /* Textos generales, títulos y etiquetas */
         .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{
             color: {tema['text']} !important;
+        }}
+
+        /* Alineación vertical de los textos del encabezado personalizado */
+        .stMarkdown p {{
+            margin-bottom: 0 !important;
         }}
 
         /* Etiqueta de Rol */
@@ -185,9 +196,8 @@ def render_ui(user_info: dict):
         st.session_state["tema_seleccionado"] = tema_actual
     idx_tema = opciones_temas.index(tema_actual)
 
-    # 2. BARRA SUPERIOR PERSONALIZADA (Reemplaza la de Streamlit y libera el Sidebar)
-    st.markdown("<br>", unsafe_allow_html=True) # Espaciado superior pequeño
-    col_user, col_rol, col_tema, col_btn = st.columns([3, 2, 3, 2])
+    # 2. BARRA SUPERIOR PERSONALIZADA COMPACTA
+    col_user, col_rol, col_tema, col_btn = st.columns([3, 2, 3, 2], vertical_alignment="center")
     
     with col_user:
         st.markdown(f"👤 **Usuario:** {user_info['nombre_completo']}")
@@ -200,7 +210,7 @@ def render_ui(user_info: dict):
             "Color", 
             opciones_temas,
             index=idx_tema,
-            label_visibility="collapsed" # Oculta la palabra "Color" para que quede limpio
+            label_visibility="collapsed"
         )
         st.session_state["tema_seleccionado"] = tema_sel
         
@@ -209,9 +219,11 @@ def render_ui(user_info: dict):
             st.session_state["logged_in"] = False
             st.rerun()
 
-    st.divider() # Línea divisoria elegante
+    # Línea divisoria elegante, fina y con poco margen
+    borde_color = TEMAS_COLOR_CLAROS[tema_sel]["border"]
+    st.markdown(f"<hr style='margin-top: 0.5rem; margin-bottom: 1rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
     
-    # Aplicar el CSS del tema seleccionado (inmediatamente después de elegirlo)
+    # Aplicar el CSS del tema seleccionado
     aplicar_estilo_tema(tema_sel)
 
     # 3. BARRA LATERAL (Solo para Logo y Navegación)
