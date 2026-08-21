@@ -140,26 +140,21 @@ def aplicar_estilo_tema(nombre_tema):
             color: #334155 !important;
         }}
 
-        /* Centrado estético y tarjeta contenedora para el Logo en el Sidebar */
+        /* Centrado natural y delicado del Logo en el Sidebar */
         [data-testid="stSidebar"] [data-testid="stImage"] {{
-            display: block !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-            text-align: center !important;
-            background-color: #ffffff !important;
-            padding: 12px !important;
-            border-radius: 12px !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
-            border: 1px solid {tema['border']} !important;
-            margin-bottom: 15px !important;
-            max-width: 170px !important;
+            display: flex !important;
+            justify-content: center !important;
+            margin-bottom: 20px !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
         }}
 
         [data-testid="stSidebar"] [data-testid="stImage"] img {{
             display: block !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-            border-radius: 8px !important;
+            margin: 0 auto !important;
+            border-radius: 5px !important;
         }}
     </style>
     """
@@ -178,14 +173,14 @@ def render_ui(user_info: dict):
     idx_tema = opciones_temas.index(tema_actual)
     aplicar_estilo_tema(tema_actual)
 
-    # Mostrar Logo Centrado y Enmarcado en el Sidebar
+    # Mostrar Logo Centrado, sin caja blanca, y más pequeño (width=130)
     path1 = "assets/hospital-penco-lirquen.png"
     path2 = "assets/logo.png"
 
     if os.path.exists(path1):
-        st.sidebar.image(path1, use_column_width=True)
+        st.sidebar.image(path1, width=130)
     elif os.path.exists(path2):
-        st.sidebar.image(path2, use_column_width=True)
+        st.sidebar.image(path2, width=130)
 
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
