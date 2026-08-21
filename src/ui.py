@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios (Crear, Editar, Eliminar), Dashboard, Consolidado General e Interfaz Segura.
+Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura.
 """
 import io
 import os
@@ -120,6 +120,11 @@ def aplicar_estilo_tema(nombre_tema):
             color: {tema['text']} !important;
         }}
 
+        /* Asegurar visibilidad de los números en las métricas del Dashboard */
+        [data-testid="stMetricValue"] {{
+            color: {tema['text']} !important;
+        }}
+
         /* Alineación vertical de los textos del encabezado personalizado */
         .stMarkdown p {{
             margin-bottom: 0 !important;
@@ -135,9 +140,7 @@ def aplicar_estilo_tema(nombre_tema):
             border-radius: 4px !important;
         }}
 
-        /* =========================================================
-           CORRECCIÓN: FONDO BLANCO PARA TODOS LOS TIPOS DE INPUTS
-           ========================================================= */
+        /* FONDO BLANCO PARA TODOS LOS TIPOS DE INPUTS */
         div[data-baseweb="select"] > div, 
         .stTextInput div[data-baseweb="input"], 
         .stNumberInput div[data-baseweb="input"], 
@@ -208,9 +211,7 @@ def aplicar_estilo_tema(nombre_tema):
             color: #334155 !important;
         }}
 
-        /* =========================================================
-           IMAGEN DEL LOGO: FORZAR ALTA CALIDAD Y ANTI-ALIASING
-           ========================================================= */
+        /* IMAGEN DEL LOGO: FORZAR ALTA CALIDAD Y ANTI-ALIASING */
         [data-testid="stSidebar"] [data-testid="stImage"] {{
             display: flex !important;
             justify-content: center !important;
@@ -225,7 +226,6 @@ def aplicar_estilo_tema(nombre_tema):
             display: block !important;
             margin: 0 auto !important;
             border-radius: 5px !important;
-            /* Suavizado y mejora de calidad */
             image-rendering: high-quality !important;
             -webkit-font-smoothing: antialiased !important;
         }}
@@ -938,7 +938,9 @@ def render_ui(user_info: dict):
             m3.metric("Trámites Concluidos", concluidos)
             m4.metric("Unidades Canjeadas/Rescatadas", int(unidades_canjeadas))
             
-            st.divider()
+            # Línea divisoria personalizada para el Dashboard
+            borde_actual = TEMAS_COLOR_CLAROS[st.session_state["tema_seleccionado"]]["border"]
+            st.markdown(f"<hr style='margin-top: 0.5rem; margin-bottom: 1.5rem; border: none; border-top: 1px solid {borde_actual};' />", unsafe_allow_html=True)
 
             col_d1, col_d2 = st.columns(2)
             
