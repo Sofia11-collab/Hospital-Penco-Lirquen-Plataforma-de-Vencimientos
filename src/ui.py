@@ -135,13 +135,29 @@ def aplicar_estilo_tema(nombre_tema):
             border-radius: 4px !important;
         }}
 
-        /* Cajas desplegables (Selectbox) e Inputs */
-        div[data-baseweb="select"] > div, .stTextInput > div > div > input, .stNumberInput > div > div > input {{
+        /* =========================================================
+           CORRECCIÓN: FONDO BLANCO PARA TODOS LOS TIPOS DE INPUTS
+           ========================================================= */
+        /* Contenedores principales (Bordes) */
+        div[data-baseweb="select"] > div, 
+        .stTextInput div[data-baseweb="input"], 
+        .stNumberInput div[data-baseweb="input"], 
+        .stDateInput div[data-baseweb="input"], 
+        .stTextArea div[data-baseweb="textarea"] {{
             background-color: #ffffff !important;
-            color: #0f172a !important;
             border: 1px solid #cbd5e1 !important;
         }}
 
+        /* Área de escritura interna (Color de fondo y letra) */
+        .stTextInput input, 
+        .stNumberInput input, 
+        .stDateInput input, 
+        .stTextArea textarea {{
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }}
+
+        /* Texto de las opciones desplegables */
         div[data-baseweb="select"] span {{
             color: #0f172a !important;
         }}
@@ -255,7 +271,7 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
-    # --- MENÚ DE NAVEGACIÓN ESTILIZADO CON EMOJIS (Textos Cortos) ---
+    # --- MENÚ DE NAVEGACIÓN ESTILIZADO CON EMOJIS ---
     tabs_disponibles = []
     if rol in ["admin", "bodega"]:
         tabs_disponibles.append("📋 1. Informe Bodega")
