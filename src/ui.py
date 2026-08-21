@@ -416,6 +416,7 @@ def render_ui(user_info: dict):
 
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
+            from openpyxl.worksheet.datavalidation import DataValidation
 
             header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
             header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
@@ -443,6 +444,22 @@ def render_ui(user_info: dict):
                     if len(val_str) > max_len:
                         max_len = len(val_str)
                 ws.column_dimensions[col_letter].width = max(max_len + 5, 18)
+
+            # --- APLICACIÓN DE VALIDACIÓN DE DATOS (LISTAS DESPLEGABLES) ---
+            # 1. Validación para TIPO PRODUCTO (Columna B)
+            dv_tipo = DataValidation(type="list", formula1='"Fármaco,Insumo"', allow_blank=True, showDropDown=True)
+            ws.add_data_validation(dv_tipo)
+            dv_tipo.add("B2:B2000")
+
+            # 2. Validación para TIPO COMPRA (Columna E)
+            dv_compra = DataValidation(type="list", formula1='"CENABAST,Compra propia"', allow_blank=True, showDropDown=True)
+            ws.add_data_validation(dv_compra)
+            dv_compra.add("E2:E2000")
+
+            # 3. Validación para MOTIVO INFORME (Columna H)
+            dv_motivo = DataValidation(type="list", formula1='"Gestión pronto vencimiento,Alerta Sanitaria,Falla de calidad"', allow_blank=True, showDropDown=True)
+            ws.add_data_validation(dv_motivo)
+            dv_motivo.add("H2:H2000")
 
         excel_data = output.getvalue()
 
