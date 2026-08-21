@@ -140,9 +140,7 @@ def aplicar_estilo_tema(nombre_tema):
             border-radius: 4px !important;
         }}
 
-        /* =========================================================
-           BOTÓN PARA EXPANDIR LA BARRA LATERAL (FLECHITA)
-           ========================================================= */
+        /* BOTÓN PARA EXPANDIR LA BARRA LATERAL (FLECHITA) */
         [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {{
             opacity: 1 !important;
             background-color: #ffffff !important;
@@ -233,7 +231,9 @@ def aplicar_estilo_tema(nombre_tema):
             color: #334155 !important;
         }}
 
-        /* IMAGEN DEL LOGO: FORZAR ALTA CALIDAD Y ANTI-ALIASING */
+        /* =========================================================
+           IMAGEN DEL LOGO: ELIMINAR FONDO BLANCO Y MEJORAR CALIDAD
+           ========================================================= */
         [data-testid="stSidebar"] [data-testid="stImage"] {{
             display: flex !important;
             justify-content: center !important;
@@ -247,9 +247,11 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="stSidebar"] [data-testid="stImage"] img {{
             display: block !important;
             margin: 0 auto !important;
-            border-radius: 5px !important;
             image-rendering: high-quality !important;
             -webkit-font-smoothing: antialiased !important;
+            
+            /* TRUCO: Elimina el fondo blanco de la imagen y la fusiona con el color de la barra */
+            mix-blend-mode: multiply !important;
         }}
     </style>
     """
@@ -299,9 +301,9 @@ def render_ui(user_info: dict):
     path2 = "assets/logo.png"
 
     if os.path.exists(path1):
-        st.sidebar.image(path1, width=130)
+        st.sidebar.image(path1, width=150)
     elif os.path.exists(path2):
-        st.sidebar.image(path2, width=130)
+        st.sidebar.image(path2, width=150)
 
     rol = user_info['rol']
     
