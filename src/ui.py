@@ -139,6 +139,28 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="stFileUploader"] section * {{
             color: #334155 !important;
         }}
+
+        /* Centrado estético y tarjeta contenedora para el Logo en el Sidebar */
+        [data-testid="stSidebar"] [data-testid="stImage"] {{
+            display: block !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            text-align: center !important;
+            background-color: #ffffff !important;
+            padding: 12px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+            border: 1px solid {tema['border']} !important;
+            margin-bottom: 15px !important;
+            max-width: 170px !important;
+        }}
+
+        [data-testid="stSidebar"] [data-testid="stImage"] img {{
+            display: block !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            border-radius: 8px !important;
+        }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -152,26 +174,28 @@ def render_ui(user_info: dict):
         tema_actual = "Claro (Predeterminado)"
         st.session_state["tema_seleccionado"] = tema_actual
 
-    # Mostrar Logo en el Sidebar desde assets
+    # Estilos aplicados
+    idx_tema = opciones_temas.index(tema_actual)
+    aplicar_estilo_tema(tema_actual)
+
+    # Mostrar Logo Centrado y Enmarcado en el Sidebar
     path1 = "assets/hospital-penco-lirquen.png"
     path2 = "assets/logo.png"
 
     if os.path.exists(path1):
-        st.sidebar.image(path1, width=150)
+        st.sidebar.image(path1, use_column_width=True)
     elif os.path.exists(path2):
-        st.sidebar.image(path2, width=150)
+        st.sidebar.image(path2, use_column_width=True)
 
     st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
     st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
     
-    idx_tema = opciones_temas.index(tema_actual)
     tema_sel = st.sidebar.selectbox(
         "🎨 Color de Fondo", 
         opciones_temas,
         index=idx_tema
     )
     st.session_state["tema_seleccionado"] = tema_sel
-    aplicar_estilo_tema(tema_sel)
     
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["logged_in"] = False
