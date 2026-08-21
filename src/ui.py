@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura (Top Bar compacto).
+Gestión de Usuarios (Crear, Editar, Eliminar), Dashboard, Consolidado General e Interfaz Segura.
 """
 import io
 import os
@@ -453,7 +453,6 @@ def render_ui(user_info: dict):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # Divisor compacto en lugar de st.divider()
         st.markdown(f"<hr style='margin-top: 1rem; margin-bottom: 0.5rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
 
         st.markdown("### 2. Subir Archivo Completado")
@@ -888,33 +887,105 @@ def render_ui(user_info: dict):
     elif tab_seleccionada == "Gestión de Usuarios":
         st.header("👥 Módulo de Gestión de Usuarios")
         
-        with st.form("form_nuevo_usuario"):
-            st.subheader("Crear Nuevo Usuario")
-            u_user = st.text_input("Usuario")
-            u_pass = st.text_input("Contraseña", type="password")
-            u_nombre = st.text_input("Nombre Completo")
-            u_rol = st.selectbox("Rol de Acceso", ["admin", "jefatura", "registro", "bodega"])
-            
-            if st.form_submit_button("Crear Usuario"):
-                if u_user and u_pass:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
-                        conn.commit()
-                        st.success("Usuario creado exitosamente.")
-                    except Exception as e:
-                        st.error(f"Error al crear usuario: {e}")
+        tab_crear, tab_editar = st.tabs(["➕ Crear Usuario", "✏️ Editar / Eliminar Usuario"])
 
-        st.subheader("Usuarios Registrados")
-        df_users = pd.read_sql_query("""
-            SELECT 
-                id AS ID, 
-                usuario AS "USUARIO", 
-                rol AS "ROL", 
-                nombre_completo AS "NOMBRE COMPLETO", 
-                estado AS "ESTADO" 
-            FROM usuarios
-        """, conn)
-        st.dataframe(df_users, hide_index=True, use_container_width=True)
+        with tab_crear:
+            with st.form("form_nuevo_usuario"):
+                st.subheader("Crear Nuevo Usuario")
+                u_user = st.text_input("Usuario")
+                u_pass = st.text_input("Contraseña", type="password")
+                u_nombre = st.text_input("Nombre Completo")
+                u_rol = st.selectbox("Rol de Acceso", ["admin", "jefatura", "registro", "bodega"])
+                
+                if st.form_submit_button("Crear Usuario"):
+                    if u_user and u_pass:
+                        try:
+                            cursor = conn.cursor()
+                            cursor.execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
+                            conn.commit()
+                            st.success("Usuario creado exitosamente.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al crear usuario: {e}")
+                    else:
+                        st.error("Por favor complete el nombre de usuario y contraseña.")
+
+            st.subheader("Usuarios Registrados")
+            df_users = pd.read_sql_query("""
+                SELECT 
+                    id AS ID, 
+                    usuario AS "USUARIO", 
+                    rol AS "ROL", 
+                    nombre_completo AS "NOMBRE COMPLETO", 
+                    estado AS "ESTADO" 
+                FROM usuarios
+            """, conn)
+            st.dataframe(df_users, hide_index=True, use_container_width=True)
+
+        with tab_editar:
+            st.subheader("Editar o Eliminar Usuarios Existentes")
+            df_users_edit = pd.read_sql_query("SELECT * FROM usuarios", conn)
+            
+            if df_users_edit.empty:
+                st.info("No hay usuarios registrados.")
+            else:
+                st.dataframe(df_users_edit[['id', 'usuario', 'rol', 'nombre_completo', 'estado']], hide_index=True, use_container_width=True)
+                
+                id_mod = st.selectbox("Seleccione ID del usuario a Modificar o Eliminar", df_users_edit['id'].tolist())
+                user_data = conn.cursor().execute("SELECT * FROM usuarios WHERE id=?", (id_mod,)).fetchone()
+                
+                if user_data:
+                    with st.form("form_editar_usuario"):
+                        st.markdown(f"**Modificando Usuario ID #{id_mod} — {user_data['usuario']}**")
+                        
+                        col_u1, col_u2 = st.columns(2)
+                        with col_u1:
+                            new_u_nombre = st.text_input("Nombre Completo", value=user_data['nombre_completo'])
+                            new_u_user = st.text_input("Usuario (Login)", value=user_data['usuario'])
+                        
+                        with col_u2:
+                            roles_opt = ["admin", "jefatura", "registro", "bodega"]
+                            idx_rol = roles_opt.index(user_data['rol']) if user_data['rol'] in roles_opt else 0
+                            new_u_rol = st.selectbox("Rol de Acceso", roles_opt, index=idx_rol)
+                            
+                            estados_opt = ["Activo", "Inactivo"]
+                            idx_est = estados_opt.index(user_data['estado']) if user_data['estado'] in estados_opt else 0
+                            new_u_estado = st.selectbox("Estado", estados_opt, index=idx_est)
+                            
+                        new_u_pass = st.text_input("Nueva Contraseña (Dejar en blanco para mantener la actual)", type="password")
+
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            guardar_mod_user = st.form_submit_button("💾 Guardar Cambios")
+                        with btn_col2:
+                            eliminar_mod_user = st.form_submit_button("🗑️ Eliminar Usuario")
+
+                        if guardar_mod_user:
+                            cursor = conn.cursor()
+                            if new_u_pass.strip():
+                                cursor.execute("""
+                                    UPDATE usuarios 
+                                    SET usuario=?, password=?, rol=?, nombre_completo=?, estado=?
+                                    WHERE id=?
+                                """, (new_u_user, new_u_pass, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            else:
+                                cursor.execute("""
+                                    UPDATE usuarios 
+                                    SET usuario=?, rol=?, nombre_completo=?, estado=?
+                                    WHERE id=?
+                                """, (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            conn.commit()
+                            st.success(f"Usuario #{id_mod} actualizado correctamente.")
+                            st.rerun()
+
+                        if eliminar_mod_user:
+                            if user_data['usuario'] == user_info['usuario']:
+                                st.error("No puedes eliminar tu propio usuario activo por medidas de seguridad.")
+                            else:
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM usuarios WHERE id=?", (id_mod,))
+                                conn.commit()
+                                st.warning(f"Usuario #{id_mod} eliminado del sistema.")
+                                st.rerun()
 
     conn.close()
