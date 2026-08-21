@@ -453,7 +453,8 @@ def render_ui(user_info: dict):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        st.divider()
+        # Divisor compacto en lugar de st.divider()
+        st.markdown(f"<hr style='margin-top: 1rem; margin-bottom: 0.5rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
 
         st.markdown("### 2. Subir Archivo Completado")
         uploaded = st.file_uploader("Subir archivo Excel o CSV", type=["xlsx", "xls", "csv"])
