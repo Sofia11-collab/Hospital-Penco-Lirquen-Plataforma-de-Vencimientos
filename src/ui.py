@@ -1,9 +1,10 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios (Crear, Editar, Eliminar), Dashboard, Consolidado General e Interfaz Segura.
+Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura (Top Bar compacto).
 """
 import io
 import os
+import time  # <-- NUEVA LIBRERÍA AGREGADA PARA LA PAUSA VISUAL
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -311,13 +312,27 @@ def render_ui(user_info: dict):
                         st.error("Complete todos los campos obligatorios (*)")
                     else:
                         cursor = conn.cursor()
+                        # --- MEDIDA DE SEGURIDAD 1: VERIFICAR DUPLICADOS ---
                         cursor.execute("""
-                        INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                        """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario']))
-                        conn.commit()
-                        st.success("Producto registrado exitosamente en el Paso 1.")
-                        st.rerun()
+                            SELECT id FROM productos 
+                            WHERE codigo_reyimen=? AND lote=? AND bodega_origen=? AND estado_global='En trámite'
+                        """, (codigo, lote, bodega))
+                        
+                        duplicado = cursor.fetchone()
+                        
+                        if duplicado:
+                            st.warning("⚠️ ¡Atención! Este producto (mismo código, lote y bodega) ya fue ingresado y se encuentra actualmente en trámite.")
+                        else:
+                            cursor.execute("""
+                            INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                            """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario']))
+                            conn.commit()
+                            
+                            st.success("✅ Producto registrado exitosamente en el Paso 1.")
+                            # --- MEDIDA DE SEGURIDAD 2: PAUSA PARA QUE EL USUARIO VEA EL MENSAJE ---
+                            time.sleep(1.5)
+                            st.rerun()
 
         with tab_p1_editar:
             st.subheader("Registros Ingresados en Paso 1 (Modificables)")
@@ -380,6 +395,7 @@ def render_ui(user_info: dict):
                             """, (new_bodega, new_tipo_compra, new_cantidad, new_lote, str(new_vencimiento), new_motivo, id_mod))
                             conn.commit()
                             st.success(f"Registro #{id_mod} actualizado correctamente.")
+                            time.sleep(1.5)
                             st.rerun()
 
                         if eliminar_mod:
@@ -387,6 +403,7 @@ def render_ui(user_info: dict):
                             cursor.execute("DELETE FROM productos WHERE id=?", (id_mod,))
                             conn.commit()
                             st.warning(f"Registro #{id_mod} eliminado.")
+                            time.sleep(1.5)
                             st.rerun()
 
     # --- CARGA MASIVA ---
@@ -478,6 +495,7 @@ def render_ui(user_info: dict):
             ok, msg = procesar_carga_masiva(uploaded, user_info['usuario'])
             if ok:
                 st.success(msg)
+                time.sleep(1.5)
                 st.rerun()
             else:
                 st.error(msg)
@@ -560,6 +578,7 @@ def render_ui(user_info: dict):
                     """, (aplica_canje, str(datetime.now().date()), prod_id))
                     conn.commit()
                     st.success("Producto avanzado al Paso 3.")
+                    time.sleep(1.5)
                     st.rerun()
 
     # --- PASO 3 ---
@@ -601,6 +620,7 @@ def render_ui(user_info: dict):
                         """, (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
                         conn.commit()
                         st.success("Producto registrado y avanzado al Paso 4.")
+                        time.sleep(1.5)
                         st.rerun()
 
         with tab_p3_seguimiento:
@@ -647,6 +667,7 @@ def render_ui(user_info: dict):
                             """, (u_proveedor, u_num_doc, u_tramite, u_obs, id_seg))
                             conn.commit()
                             st.success(f"Estado del trámite para ID #{id_seg} actualizado correctamente.")
+                            time.sleep(1.5)
                             st.rerun()
 
     # --- PASO 4 ---
@@ -682,6 +703,7 @@ def render_ui(user_info: dict):
                     """, (ub_fisica, ub_comp, num_bulto, str(datetime.now().date()), obs, prod_id))
                     conn.commit()
                     st.success("Producto avanzado al Paso 5.")
+                    time.sleep(1.5)
                     st.rerun()
 
     # --- PASO 5 ---
@@ -721,6 +743,7 @@ def render_ui(user_info: dict):
                         """, (num_res, estado_fin, str(datetime.now().date()), obs, prod_id))
                         conn.commit()
                         st.success("Producto CONCLUIDO con éxito. Se ha archivado al histórico.")
+                        time.sleep(1.5)
                         st.rerun()
 
         with tab_p5_sin_canje:
@@ -767,6 +790,7 @@ def render_ui(user_info: dict):
                             """, (difusion_sel, redistribucion_sel, obs_sc, id_sc))
                             conn.commit()
                             st.success(f"Gestión registrada para el Producto #{id_sc}.")
+                            time.sleep(1.5)
                             st.rerun()
 
     # --- CONSOLIDADO GENERAL (CON HISTÓRICO UNIFICADO) ---
@@ -921,6 +945,7 @@ def render_ui(user_info: dict):
                             cursor.execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
                             conn.commit()
                             st.success("Usuario creado exitosamente.")
+                            time.sleep(1.5)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error al crear usuario: {e}")
@@ -993,6 +1018,7 @@ def render_ui(user_info: dict):
                                 """, (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
                             conn.commit()
                             st.success(f"Usuario #{id_mod} actualizado correctamente.")
+                            time.sleep(1.5)
                             st.rerun()
 
                         if eliminar_mod_user:
@@ -1003,6 +1029,7 @@ def render_ui(user_info: dict):
                                 cursor.execute("DELETE FROM usuarios WHERE id=?", (id_mod,))
                                 conn.commit()
                                 st.warning(f"Usuario #{id_mod} eliminado del sistema.")
+                                time.sleep(1.5)
                                 st.rerun()
 
     conn.close()
