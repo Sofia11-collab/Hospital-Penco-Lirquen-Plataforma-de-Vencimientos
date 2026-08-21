@@ -138,7 +138,6 @@ def aplicar_estilo_tema(nombre_tema):
         /* =========================================================
            CORRECCIÓN: FONDO BLANCO PARA TODOS LOS TIPOS DE INPUTS
            ========================================================= */
-        /* Contenedores principales (Bordes) */
         div[data-baseweb="select"] > div, 
         .stTextInput div[data-baseweb="input"], 
         .stNumberInput div[data-baseweb="input"], 
@@ -148,7 +147,6 @@ def aplicar_estilo_tema(nombre_tema):
             border: 1px solid #cbd5e1 !important;
         }}
 
-        /* Área de escritura interna (Color de fondo y letra) */
         .stTextInput input, 
         .stNumberInput input, 
         .stDateInput input, 
@@ -157,8 +155,17 @@ def aplicar_estilo_tema(nombre_tema):
             color: #0f172a !important;
         }}
 
-        /* Texto de las opciones desplegables */
         div[data-baseweb="select"] span {{
+            color: #0f172a !important;
+        }}
+
+        /* Menú desplegable interno */
+        ul[data-testid="stSelectboxVirtualDropdown"] {{
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+        }}
+        
+        ul[data-testid="stSelectboxVirtualDropdown"] li {{
             color: #0f172a !important;
         }}
         
@@ -201,7 +208,9 @@ def aplicar_estilo_tema(nombre_tema):
             color: #334155 !important;
         }}
 
-        /* Centrado natural del Logo en el Sidebar */
+        /* =========================================================
+           IMAGEN DEL LOGO: FORZAR ALTA CALIDAD Y ANTI-ALIASING
+           ========================================================= */
         [data-testid="stSidebar"] [data-testid="stImage"] {{
             display: flex !important;
             justify-content: center !important;
@@ -216,6 +225,9 @@ def aplicar_estilo_tema(nombre_tema):
             display: block !important;
             margin: 0 auto !important;
             border-radius: 5px !important;
+            /* Suavizado y mejora de calidad */
+            image-rendering: high-quality !important;
+            -webkit-font-smoothing: antialiased !important;
         }}
     </style>
     """
