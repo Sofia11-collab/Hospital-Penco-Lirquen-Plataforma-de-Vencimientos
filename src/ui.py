@@ -1,6 +1,6 @@
 """
 Módulo de Interfaz de Usuario para los 5 Pasos Operativos, Carga Masiva,
-Gestión de Usuarios, Dashboard, Consolidado General (con Histórico Integrado) y Personalización de Tema Claro.
+Gestión de Usuarios, Dashboard, Consolidado General e Interfaz Segura (Top Bar personalizado).
 """
 import io
 import os
@@ -57,6 +57,22 @@ def aplicar_estilo_tema(nombre_tema):
     tema = TEMAS_COLOR_CLAROS.get(nombre_tema, TEMAS_COLOR_CLAROS["Claro (Predeterminado)"])
     css = f"""
     <style>
+        /* =========================================================
+           MEDIDAS DE SEGURIDAD: OCULTAR MENÚ POR DEFECTO DE STREAMLIT
+           ========================================================= */
+        [data-testid="stHeader"] {{
+            display: none !important;
+        }}
+        #MainMenu {{
+            visibility: hidden !important;
+        }}
+        footer {{
+            visibility: hidden !important;
+        }}
+        .stDeployButton {{
+            display: none !important;
+        }}
+
         /* Fondo general de la app */
         .stApp {{
             background-color: {tema['bg']} !important;
@@ -81,7 +97,7 @@ def aplicar_estilo_tema(nombre_tema):
         }}
 
         /* Etiqueta de Rol */
-        [data-testid="stSidebar"] code {{
+        code {{
             background-color: #dcfce7 !important;
             color: #15803d !important;
             border: 1px solid #86efac !important;
@@ -98,16 +114,6 @@ def aplicar_estilo_tema(nombre_tema):
         }}
 
         div[data-baseweb="select"] span {{
-            color: #0f172a !important;
-        }}
-
-        /* Menú desplegable interno (Lista de opciones) */
-        ul[data-testid="stSelectboxVirtualDropdown"] {{
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-        }}
-        
-        ul[data-testid="stSelectboxVirtualDropdown"] li {{
             color: #0f172a !important;
         }}
         
@@ -150,7 +156,7 @@ def aplicar_estilo_tema(nombre_tema):
             color: #334155 !important;
         }}
 
-        /* Centrado natural y delicado del Logo en el Sidebar */
+        /* Centrado natural del Logo en el Sidebar */
         [data-testid="stSidebar"] [data-testid="stImage"] {{
             display: flex !important;
             justify-content: center !important;
@@ -171,17 +177,44 @@ def aplicar_estilo_tema(nombre_tema):
     st.markdown(css, unsafe_allow_html=True)
 
 def render_ui(user_info: dict):
-    # 1. Verificación segura del tema en memoria
+    # 1. Gestión de Tema y Colores
     opciones_temas = list(TEMAS_COLOR_CLAROS.keys())
     tema_actual = st.session_state.get("tema_seleccionado", "Claro (Predeterminado)")
-    
     if tema_actual not in opciones_temas:
         tema_actual = "Claro (Predeterminado)"
         st.session_state["tema_seleccionado"] = tema_actual
-
     idx_tema = opciones_temas.index(tema_actual)
 
-    # 2. Mostrar Logo en el Sidebar
+    # 2. BARRA SUPERIOR PERSONALIZADA (Reemplaza la de Streamlit y libera el Sidebar)
+    st.markdown("<br>", unsafe_allow_html=True) # Espaciado superior pequeño
+    col_user, col_rol, col_tema, col_btn = st.columns([3, 2, 3, 2])
+    
+    with col_user:
+        st.markdown(f"👤 **Usuario:** {user_info['nombre_completo']}")
+    
+    with col_rol:
+        st.markdown(f"🛡️ **Rol:** `{user_info['rol'].upper()}`")
+        
+    with col_tema:
+        tema_sel = st.selectbox(
+            "Color", 
+            opciones_temas,
+            index=idx_tema,
+            label_visibility="collapsed" # Oculta la palabra "Color" para que quede limpio
+        )
+        st.session_state["tema_seleccionado"] = tema_sel
+        
+    with col_btn:
+        if st.button("🚪 Cerrar Sesión", use_container_width=True):
+            st.session_state["logged_in"] = False
+            st.rerun()
+
+    st.divider() # Línea divisoria elegante
+    
+    # Aplicar el CSS del tema seleccionado (inmediatamente después de elegirlo)
+    aplicar_estilo_tema(tema_sel)
+
+    # 3. BARRA LATERAL (Solo para Logo y Navegación)
     path1 = "assets/hospital-penco-lirquen.png"
     path2 = "assets/logo.png"
 
@@ -189,24 +222,6 @@ def render_ui(user_info: dict):
         st.sidebar.image(path1, width=130)
     elif os.path.exists(path2):
         st.sidebar.image(path2, width=130)
-
-    st.sidebar.markdown(f"**Usuario:** {user_info['nombre_completo']}")
-    st.sidebar.markdown(f"**Rol:** `{user_info['rol'].upper()}`")
-    
-    # 3. Selector de color (Streamlit capta el nuevo valor aquí instantáneamente)
-    tema_sel = st.sidebar.selectbox(
-        "🎨 Color de Fondo", 
-        opciones_temas,
-        index=idx_tema
-    )
-    
-    # 4. Guardamos en sesión el NUEVO valor y aplicamos el estilo AL FINAL
-    st.session_state["tema_seleccionado"] = tema_sel
-    aplicar_estilo_tema(tema_sel)
-    
-    if st.sidebar.button("Cerrar Sesión"):
-        st.session_state["logged_in"] = False
-        st.rerun()
 
     rol = user_info['rol']
     
