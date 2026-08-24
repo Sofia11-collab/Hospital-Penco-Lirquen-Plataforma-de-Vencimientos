@@ -82,11 +82,18 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="collapsedControl"]:hover, [data-testid="stSidebarCollapsedControl"]:hover {{ background-color: #f1f5f9 !important; border-color: #94a3b8 !important; }}
         [data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg {{ fill: #0f172a !important; color: #0f172a !important; }}
 
+        /* SOLUCIÓN AL COLOR DE LAS LISTAS DESPLEGABLES */
         div[data-baseweb="select"] > div, .stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
+        
+        /* Forzar color oscuro en todo el contenido de los selectbox */
+        div[data-baseweb="select"] * {{ color: #0f172a !important; }}
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #ffffff !important; color: #0f172a !important; }}
-        div[data-baseweb="select"] span {{ color: #0f172a !important; }}
+        
+        /* Opciones del menú desplegable interno */
         ul[data-testid="stSelectboxVirtualDropdown"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
-        ul[data-testid="stSelectboxVirtualDropdown"] li {{ color: #0f172a !important; }}
+        ul[data-testid="stSelectboxVirtualDropdown"] li {{ background-color: #ffffff !important; color: #0f172a !important; }}
+        ul[data-testid="stSelectboxVirtualDropdown"] li:hover {{ background-color: #e2e8f0 !important; color: #0f172a !important; }}
+        
         .stButton button, .stDownloadButton button, [data-testid="stFileUploader"] button {{ background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; font-weight: bold !important; box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; }}
         .stButton button *, .stDownloadButton button *, [data-testid="stFileUploader"] button * {{ color: #0f172a !important; }}
         div[data-testid="stForm"] button {{ background-color: #0284c7 !important; border: 1px solid #0369a1 !important; }}
@@ -102,16 +109,11 @@ def aplicar_estilo_tema(nombre_tema):
     st.markdown(css, unsafe_allow_html=True)
 
 def generar_anexo_ii_docx(datos):
-    """Genera el documento Word (Anexo II) con la información de la Alerta Sanitaria."""
     doc = Document()
-    
-    # Título Principal
     titulo = doc.add_heading('ANEXO II', level=1)
-    titulo.alignment = 1 # Centrado
-    
+    titulo.alignment = 1 
     sub = doc.add_heading('FORMULARIO DE REPORTE DE EXISTENCIAS DE PRODUCTO RETIRADO DEL MERCADO', level=2)
     sub.alignment = 1
-    
     doc.add_paragraph('PRODUCTOS FARMACÉUTICOS (ARTS. 60° y 71° 3, D.S. N° 3/2010)').alignment = 1
     doc.add_paragraph('Documento emitido por cada establecimiento que ha recibido producto afecto(s) a retiro del mercado, que da cuenta de la cantidad recibida, stock y cantidad distribuida de los lotes en cuestión, que debe ser informado al distribuidor de quien obtuvo el producto.')
     
@@ -141,7 +143,6 @@ def generar_anexo_ii_docx(datos):
     return bio.getvalue()
 
 def actualizar_bd_alertas(conn):
-    """Actualiza la estructura de la base de datos de forma segura para soportar Alertas."""
     cursor = conn.cursor()
     columnas = [
         "alerta_numero TEXT", "alerta_fecha TEXT", "titular_registro TEXT", 
@@ -151,7 +152,7 @@ def actualizar_bd_alertas(conn):
         try:
             cursor.execute(f"ALTER TABLE productos ADD COLUMN {col}")
         except sqlite3.OperationalError:
-            pass # Si la columna ya existe, ignora el error y continua
+            pass 
     conn.commit()
 
 def render_ui(user_info: dict):
@@ -186,7 +187,6 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
-    # --- MENÚ DE NAVEGACIÓN ESTILIZADO CON EMOJIS ---
     tabs_disponibles = []
     if rol in ["admin", "bodega"]:
         tabs_disponibles.append("📋 1. Informe Bodega")
@@ -207,7 +207,6 @@ def render_ui(user_info: dict):
     if rol == "admin":
         tabs_disponibles.append("👥 Gestión de Usuarios")
 
-    # label_visibility="collapsed" oculta la palabra "Navegación"
     tab_seleccionada = st.sidebar.radio("Navegación", tabs_disponibles, label_visibility="collapsed")
 
     # --- PASO 1 ---
@@ -234,16 +233,18 @@ def render_ui(user_info: dict):
                 desc_auto = item.get("descripcion", "")
                 unidad_auto = item.get("unidad", "")
 
+            # CORRECCIÓN DE LA LÓGICA: Motivo fuera del formulario para que actualice de inmediato
+            st.divider()
+            motivo = st.selectbox(
+                "Motivo de informe *",
+                ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
+            )
+            
+            es_alerta = (motivo == "Alerta Sanitaria")
+            if es_alerta:
+                st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
+
             with st.form("form_paso1"):
-                motivo = st.selectbox(
-                    "Motivo de informe *",
-                    ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"]
-                )
-                
-                es_alerta = (motivo == "Alerta Sanitaria")
-                if es_alerta:
-                    st.error("🚨 MODO ALERTA SANITARIA: El producto será bloqueado y pasará a Cuarentena Inmediata.")
-                
                 col1, col2 = st.columns(2)
                 with col1:
                     codigo = st.text_input("Código Reyimen *", value=cod_auto)
@@ -652,9 +653,9 @@ def render_ui(user_info: dict):
                             time.sleep(1)
                             st.rerun()
 
-    # --- CONSOLIDADO & DASHBOARD ---
+    # --- CONSOLIDADO ---
     elif tab_seleccionada == "🔍 Consolidado General":
-        st.header("🔍 Consolidado")
+        st.header("🔍 Consolidado General")
         tab_cons_todos, tab_cons_historico = st.tabs(["🌐 Todos", "📁 Histórico Concluidos"])
         with tab_cons_todos:
             df_cons = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn)
