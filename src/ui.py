@@ -180,29 +180,29 @@ def actualizar_bd_alertas(conn):
 def render_ui(user_info: dict):
     conn = get_connection()
     actualizar_bd_alertas(conn)
-
+    
+    # 1. Recuperamos el tema primero para aplicar el CSS
     opciones_temas = list(TEMAS_COLOR_CLAROS.keys())
     tema_actual = st.session_state.get("tema_seleccionado", "Claro (Predeterminado)")
     if tema_actual not in opciones_temas:
         tema_actual = "Claro (Predeterminado)"
-        st.session_state["tema_seleccionado"] = tema_actual
     idx_tema = opciones_temas.index(tema_actual)
+    
+    aplicar_estilo_tema(tema_actual)
 
-    col_user, col_rol, col_tema, col_btn = st.columns([3, 2, 3, 2], vertical_alignment="center")
+    # 2. Barra Superior Limpia (Sin el selector de color)
+    col_user, col_rol, col_btn = st.columns([5, 4, 2], vertical_alignment="center")
     with col_user: st.markdown(f"👤 **Usuario:** {user_info['nombre_completo']}")
     with col_rol: st.markdown(f"🛡️ **Rol:** `{user_info['rol'].upper()}`")
-    with col_tema:
-        tema_sel = st.selectbox("Color", opciones_temas, index=idx_tema, label_visibility="collapsed")
-        st.session_state["tema_seleccionado"] = tema_sel
     with col_btn:
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state["logged_in"] = False
             st.rerun()
 
-    borde_color = TEMAS_COLOR_CLAROS[tema_sel]["border"]
+    borde_color = TEMAS_COLOR_CLAROS[tema_actual]["border"]
     st.markdown(f"<hr style='margin-top: 0.5rem; margin-bottom: 1rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
-    aplicar_estilo_tema(tema_sel)
 
+    # 3. Barra Lateral
     path1, path2 = "assets/hospital-penco-lirquen.png", "assets/logo.png"
     if os.path.exists(path1): st.sidebar.image(path1, width=150)
     elif os.path.exists(path2): st.sidebar.image(path2, width=150)
@@ -218,7 +218,6 @@ def render_ui(user_info: dict):
     
     tabs_disponibles = []
     
-    # 1. Menú Vencimientos Normales
     if modulo_sel == "💊 Gestión de Vencimientos":
         if rol in ["admin", "bodega"]:
             tabs_disponibles.append("📋 1. Informe Bodega")
@@ -232,14 +231,12 @@ def render_ui(user_info: dict):
         if rol in ["admin", "jefatura"]:
             tabs_disponibles.append("📜 5. Resolución/Cierre")
             
-    # 2. Menú Exclusivo Alertas Sanitarias
     elif modulo_sel == "🚨 Alertas Sanitarias":
         if rol in ["admin", "bodega"]:
             tabs_disponibles.append("📋 1. Ingresar Nueva Alerta")
         if rol in ["admin", "jefatura"]:
             tabs_disponibles.append("🚨 Gestión Anexo II (Jefatura)")
             
-    # 3. Menú Reportes y Administración
     elif modulo_sel == "⚙️ Reportes y Adm.":
         tabs_disponibles.append("🔍 Consolidado General")
         tabs_disponibles.append("📊 Dashboard / Análisis")
@@ -248,7 +245,16 @@ def render_ui(user_info: dict):
 
     tab_seleccionada = st.sidebar.radio("Pasos", tabs_disponibles, label_visibility="collapsed")
 
-    # --- PASO 1 (Se usa tanto para Vencimientos como para Alertas) ---
+    # --- SELECTOR DE TEMA MOVIDO A LA BARRA LATERAL (AL FINAL) ---
+    st.sidebar.markdown(f"<hr style='margin: 1.5rem 0 0.5rem 0; border: none; border-top: 1px dashed {borde_color};' />", unsafe_allow_html=True)
+    st.sidebar.markdown("<p style='font-size: 13px; margin-bottom: 4px;'>🎨 Tema Visual</p>", unsafe_allow_html=True)
+    tema_sel = st.sidebar.selectbox("Tema Visual", opciones_temas, index=idx_tema, label_visibility="collapsed", key="tema_sidebar")
+    if tema_sel != tema_actual:
+        st.session_state["tema_seleccionado"] = tema_sel
+        st.rerun()
+    # -------------------------------------------------------------
+
+    # --- PASO 1 ---
     if tab_seleccionada in ["📋 1. Informe Bodega", "📋 1. Ingresar Nueva Alerta"]:
         es_modulo_alerta = (tab_seleccionada == "📋 1. Ingresar Nueva Alerta")
         
@@ -279,43 +285,45 @@ def render_ui(user_info: dict):
                 desc_auto = item.get("descripcion", "")
                 unidad_auto = item.get("unidad", "")
 
-            # LOGICA AUTOMÁTICA (Sin campos desplegables innecesarios)
+            st.divider()
+
             if es_modulo_alerta:
                 motivo = "Alerta Sanitaria"
-                es_alerta = True
                 st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
             else:
                 motivo = "Gestión pronto vencimiento"
-                es_alerta = False
 
             with st.form("form_paso1"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    codigo = st.text_input("Código Reyimen *", value=cod_auto)
-                    descripcion = st.text_input("Descripción *", value=desc_auto)
-                    
-                    if not es_alerta:
-                        tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
-                    else:
-                        tipo_compra = "No Aplica (Alerta)"
-                        alerta_numero = st.text_input("N° Alerta Sanitaria ISP *")
-                        alerta_fecha = st.date_input("Fecha de Alerta ISP *")
+                # CONSTRUCCIÓN FILA POR FILA PARA EVITAR ESPACIOS VACÍOS
+                c1, c2 = st.columns(2)
                 
-                with col2:
-                    unidad = st.text_input("Unidad *", value=unidad_auto)
-                    cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
+                # Fila 1
+                codigo = c1.text_input("Código Reyimen *", value=cod_auto)
+                unidad = c2.text_input("Unidad *", value=unidad_auto)
+                
+                # Fila 2
+                descripcion = c1.text_input("Descripción *", value=desc_auto)
+                cantidad = c2.number_input("Cantidad *", min_value=0.0, step=1.0)
+                
+                # Fila 3, 4 y 5 (Diferentes según el módulo)
+                if es_modulo_alerta:
+                    tipo_compra = "No Aplica (Alerta)"
                     
-                    if es_alerta:
-                        num_bulto_alerta = st.text_input("Número de Bulto Físico (Bodega Excluidos) *")
-
-                c3, c4 = st.columns(2)
-                with c3:
-                    vencimiento = st.date_input("Fecha de Vencimiento *")
-                with c4:
-                    lote = st.text_input("Lote *")
+                    alerta_numero = c1.text_input("N° Alerta Sanitaria ISP *")
+                    num_bulto_alerta = c2.text_input("Número de Bulto Físico (Bodega Excluidos) *")
+                    
+                    alerta_fecha = c1.date_input("Fecha de Alerta ISP *")
+                    vencimiento = c2.date_input("Fecha de Vencimiento *")
+                    
+                    lote = c1.text_input("Lote *")
+                else:
+                    tipo_compra = c1.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
+                    vencimiento = c2.date_input("Fecha de Vencimiento *")
+                    
+                    lote = c1.text_input("Lote *")
                 
                 if st.form_submit_button("Guardar Paso 1"):
-                    if not codigo or not descripcion or not lote or (es_alerta and (not alerta_numero or not num_bulto_alerta)):
+                    if not codigo or not descripcion or not lote or (es_modulo_alerta and (not alerta_numero or not num_bulto_alerta)):
                         st.error("Complete todos los campos obligatorios (*)")
                     else:
                         cursor = conn.cursor()
@@ -324,12 +332,12 @@ def render_ui(user_info: dict):
                         if cursor.fetchone():
                             st.warning("⚠️ ¡Atención! Este producto (mismo código, lote y bodega) ya fue ingresado y está activo.")
                         else:
-                            estado_inicial = 'CUARENTENA' if es_alerta else 'En trámite'
+                            estado_inicial = 'CUARENTENA' if es_modulo_alerta else 'En trámite'
                             paso_inicial = 2
-                            ub_fisica = "Bodega de Excluidos" if es_alerta else ""
-                            bulto = num_bulto_alerta if es_alerta else ""
-                            a_num = alerta_numero if es_alerta else ""
-                            a_fec = str(alerta_fecha) if es_alerta else ""
+                            ub_fisica = "Bodega de Excluidos" if es_modulo_alerta else ""
+                            bulto = num_bulto_alerta if es_modulo_alerta else ""
+                            a_num = alerta_numero if es_modulo_alerta else ""
+                            a_fec = str(alerta_fecha) if es_modulo_alerta else ""
 
                             cursor.execute("""
                             INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual, estado_global, ubicacion_fisica, numero_bulto, alerta_numero, alerta_fecha)
@@ -354,17 +362,16 @@ def render_ui(user_info: dict):
                 if prod_data:
                     with st.form("form_editar_p1"):
                         st.markdown(f"**Modificando Registro ID #{id_mod} — {prod_data['descripcion']}**")
-                        col_e1, col_e2 = st.columns(2)
-                        with col_e1:
-                            idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
-                            new_bodega = st.selectbox("Bodega Origen *", BODEGAS_OFICIALES, index=idx_bodega)
-                            new_cantidad = st.number_input("Cantidad *", value=float(prod_data['cantidad']), min_value=0.0, step=1.0)
+                        c_edit1, c_edit2 = st.columns(2)
                         
-                        with col_e2:
-                            new_lote = st.text_input("Lote *", value=prod_data['lote'])
-                            try: fecha_init = datetime.strptime(prod_data['vencimiento'], "%Y-%m-%d").date()
-                            except: fecha_init = datetime.now().date()
-                            new_vencimiento = st.date_input("Fecha de Vencimiento *", value=fecha_init)
+                        idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
+                        new_bodega = c_edit1.selectbox("Bodega Origen *", BODEGAS_OFICIALES, index=idx_bodega)
+                        new_cantidad = c_edit2.number_input("Cantidad *", value=float(prod_data['cantidad']), min_value=0.0, step=1.0)
+                        
+                        new_lote = c_edit1.text_input("Lote *", value=prod_data['lote'])
+                        try: fecha_init = datetime.strptime(prod_data['vencimiento'], "%Y-%m-%d").date()
+                        except: fecha_init = datetime.now().date()
+                        new_vencimiento = c_edit2.date_input("Fecha de Vencimiento *", value=fecha_init)
 
                         btn_col1, btn_col2 = st.columns(2)
                         with btn_col1: guardar_mod = st.form_submit_button("💾 Guardar Cambios")
@@ -580,7 +587,7 @@ def render_ui(user_info: dict):
                             conn.commit()
                             st.success("Guardado."); time.sleep(1); st.rerun()
 
-    # --- CONSOLIDADO & ADMIN ---
+    # --- CONSOLIDADO Y ADMIN ---
     elif tab_seleccionada == "🔍 Consolidado General":
         st.header("🔍 Consolidado")
         st.dataframe(pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn), hide_index=True)
