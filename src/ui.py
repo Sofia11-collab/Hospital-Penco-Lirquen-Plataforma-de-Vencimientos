@@ -69,9 +69,12 @@ def aplicar_estilo_tema(nombre_tema):
         .stApp {{ background-color: {tema['bg']} !important; color: {tema['text']} !important; }}
         [data-testid="stSidebar"] {{ background-color: {tema['card']} !important; border-right: 1px solid {tema['border']} !important; }}
         [data-testid="stSidebar"] *, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {{ color: {tema['text']} !important; font-weight: 600 !important; }}
+        
+        /* Ajuste de diseño para los menús */
         [data-testid="stSidebar"] div[role="radiogroup"] > label {{ padding: 10px 12px; background-color: transparent; border-radius: 8px; margin-bottom: 4px; transition: all 0.2s ease; }}
         [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {{ background-color: rgba(0, 0, 0, 0.04); transform: translateX(4px); }}
         [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {{ transform: scale(0.85); }}
+        
         .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{ color: {tema['text']} !important; }}
         [data-testid="stMetricValue"] {{ color: {tema['text']} !important; }}
         .stMarkdown p {{ margin-bottom: 0 !important; }}
@@ -104,106 +107,66 @@ def aplicar_estilo_tema(nombre_tema):
     st.markdown(css, unsafe_allow_html=True)
 
 def generar_anexo_ii_docx(datos):
-    """Genera el Anexo II en formato de Tablas exacto al del ISP."""
     doc = Document()
     
-    # 1. Membrete gris superior izquierdo
     p_membrete = doc.add_paragraph()
     run_mem1 = p_membrete.add_run("DEPARTAMENTO AGENCIA NACIONAL DE MEDICAMENTOS\n")
     run_mem2 = p_membrete.add_run("SUBDEPARTAMENTO DE FISCALIZACIÓN")
-    run_mem1.font.size = Pt(8)
-    run_mem1.font.bold = True
-    run_mem1.font.color.rgb = RGBColor(128, 128, 128)
-    run_mem2.font.size = Pt(8)
-    run_mem2.font.bold = True
-    run_mem2.font.color.rgb = RGBColor(128, 128, 128)
+    run_mem1.font.size = Pt(8); run_mem1.font.bold = True; run_mem1.font.color.rgb = RGBColor(128, 128, 128)
+    run_mem2.font.size = Pt(8); run_mem2.font.bold = True; run_mem2.font.color.rgb = RGBColor(128, 128, 128)
     
-    # 2. Títulos Centrales
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_t1 = p_titulo.add_run("ANEXO II\n")
     run_t2 = p_titulo.add_run("FORMULARIO DE REPORTE DE EXISTENCIAS DE PRODUCTO RETIRADO DEL MERCADO\n")
     run_t3 = p_titulo.add_run("PRODUCTOS FARMACÉUTICOS (ARTS. 60° y 71° 3, D.S. N° 3/2010)\n")
-    for r in [run_t1, run_t2, run_t3]:
-        r.font.bold = True
-        r.font.size = Pt(11)
-        r.font.name = 'Arial'
+    for r in [run_t1, run_t2, run_t3]: r.font.bold = True; r.font.size = Pt(11); r.font.name = 'Arial'
 
-    # 3. Párrafo introductorio (Cursiva)
     p_intro = doc.add_paragraph()
     p_intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     run_intro = p_intro.add_run("Documento emitido por cada establecimiento que ha recibido producto afecto(s) a retiro del mercado, que da cuenta de la cantidad recibida, stock y cantidad distribuida de los lotes en cuestión, que debe ser informado al distribuidor de quien obtuvo el producto, mediante el presente formato o por otro documento que contenga la misma información, para ser reportado finalmente al titular del producto sujeto a retiro del mercado.")
-    run_intro.font.italic = True
-    run_intro.font.size = Pt(11)
-    
+    run_intro.font.italic = True; run_intro.font.size = Pt(11)
     doc.add_paragraph() 
     
-    # --- TABLA 1: ANTECEDENTES DEL PRODUCTO ---
     p_h1 = doc.add_paragraph()
     r_h1 = p_h1.add_run("ANTECEDENTES DEL PRODUCTO EN PROCESO DE RETIRO DEL MERCADO\n")
     r_h1.font.bold = True
     r_h1_sub = p_h1.add_run("(Datos aportados por el titular o distribuidor al establecimiento receptor que suscribe la información del presente formulario)")
-    r_h1_sub.font.bold = True
-    r_h1_sub.font.italic = True
+    r_h1_sub.font.bold = True; r_h1_sub.font.italic = True
     
-    t1 = doc.add_table(rows=5, cols=2)
-    t1.style = 'Table Grid'
-    t1.cell(0,0).text = "PRODUCTO"
-    t1.cell(0,1).text = datos.get('descripcion', '')
-    t1.cell(1,0).text = "PRINCIPIO ACTIVO"
-    t1.cell(1,1).text = datos.get('principio_activo', '')
-    t1.cell(2,0).text = "TITULAR"
-    t1.cell(2,1).text = datos.get('titular', '')
-    t1.cell(3,0).text = "N° DE REGISTRO SANITARIO"
-    t1.cell(3,1).text = datos.get('registro_sanitario', '')
-    t1.cell(4,0).text = "NUMERO DE SERIE(S) / LOTE(S)"
-    t1.cell(4,1).text = datos.get('lote', '')
-    
+    t1 = doc.add_table(rows=5, cols=2); t1.style = 'Table Grid'
+    t1.cell(0,0).text = "PRODUCTO"; t1.cell(0,1).text = datos.get('descripcion', '')
+    t1.cell(1,0).text = "PRINCIPIO ACTIVO"; t1.cell(1,1).text = datos.get('principio_activo', '')
+    t1.cell(2,0).text = "TITULAR"; t1.cell(2,1).text = datos.get('titular', '')
+    t1.cell(3,0).text = "N° DE REGISTRO SANITARIO"; t1.cell(3,1).text = datos.get('registro_sanitario', '')
+    t1.cell(4,0).text = "NUMERO DE SERIE(S) / LOTE(S)"; t1.cell(4,1).text = datos.get('lote', '')
     doc.add_paragraph() 
     
-    # --- TABLA 2: ANTECEDENTES DEL ESTABLECIMIENTO ---
     p_h2 = doc.add_paragraph()
     r_h2 = p_h2.add_run("ANTECEDENTES DEL ESTABLECIMIENTO RECEPTOR QUE SUSCRIBE LA INFORMACIÓN")
     r_h2.font.bold = True
     
-    t2 = doc.add_table(rows=5, cols=2)
-    t2.style = 'Table Grid'
-    t2.cell(0,0).text = "NOMBRE y DIRECCIÓN"
-    t2.cell(0,1).text = "Hospital Penco Lirquén"
-    t2.cell(1,0).text = "TIPO DE ESTABLECIMIENTO/LÍNEAS DE ACTIVIDAD"
-    t2.cell(1,1).text = "Establecimiento de Salud Pública"
-    t2.cell(2,0).text = "REPRESENTANTE LEGAL"
-    t2.cell(2,1).text = datos.get('representante_legal', '')
-    t2.cell(3,0).text = "DIRECTOR TÉCNICO/RESPONSABLE TÉCNICO"
-    t2.cell(3,1).text = datos.get('director_tecnico', '')
-    t2.cell(4,0).text = "FECHA DE REPORTE"
-    t2.cell(4,1).text = datetime.now().strftime('%d-%m-%Y')
-    
+    t2 = doc.add_table(rows=5, cols=2); t2.style = 'Table Grid'
+    t2.cell(0,0).text = "NOMBRE y DIRECCIÓN"; t2.cell(0,1).text = "Hospital Penco Lirquén"
+    t2.cell(1,0).text = "TIPO DE ESTABLECIMIENTO/LÍNEAS DE ACTIVIDAD"; t2.cell(1,1).text = "Establecimiento de Salud Pública"
+    t2.cell(2,0).text = "REPRESENTANTE LEGAL"; t2.cell(2,1).text = datos.get('representante_legal', '')
+    t2.cell(3,0).text = "DIRECTOR TÉCNICO/RESPONSABLE TÉCNICO"; t2.cell(3,1).text = datos.get('director_tecnico', '')
+    t2.cell(4,0).text = "FECHA DE REPORTE"; t2.cell(4,1).text = datetime.now().strftime('%d-%m-%Y')
     doc.add_paragraph() 
     
-    # --- TABLA 3: ANTECEDENTES MOVIMIENTO ---
     p_h3 = doc.add_paragraph()
     r_h3 = p_h3.add_run("ANTECEDENTES MOVIMIENTO DEL PRODUCTO")
     r_h3.font.bold = True
     
-    t3 = doc.add_table(rows=8, cols=2)
-    t3.style = 'Table Grid'
-    t3.cell(0,0).text = "PROVEEDOR"
-    t3.cell(0,1).text = datos.get('proveedor', '')
-    t3.cell(1,0).text = "CANTIDAD RECIBIDA EN EL ESTABLECIMIENTO RECEPTOR"
-    t3.cell(1,1).text = "N/A"
-    t3.cell(2,0).text = "CANTIDAD EN EXISTENCIA (STOCK) NO DISTRIBUIDA"
-    t3.cell(2,1).text = f"{datos.get('cantidad', '')} {datos.get('unidad', '')}"
-    t3.cell(3,0).text = "CANTIDAD DISTRIBUIDA A OTROS ESTABLECIMIENTOS RECEPTORES"
-    t3.cell(3,1).text = "0"
-    t3.cell(4,0).text = "REGISTRO DE DISTRIBUCIÓN"
-    t3.cell(4,1).text = "N/A"
-    t3.cell(5,0).text = "OTRAS OBSERVACIONES"
-    t3.cell(5,1).text = datos.get('observaciones', '')
-    t3.cell(6,0).text = "IDENTIFICACIÓN DE NOTIFICANTE y TELÉFONO DIRECTO"
-    t3.cell(6,1).text = f"{datos.get('director_tecnico', '')} - "
-    t3.cell(7,0).text = "FIRMA DE NOTIFICANTE"
-    t3.cell(7,1).text = "" 
+    t3 = doc.add_table(rows=8, cols=2); t3.style = 'Table Grid'
+    t3.cell(0,0).text = "PROVEEDOR"; t3.cell(0,1).text = datos.get('proveedor', '')
+    t3.cell(1,0).text = "CANTIDAD RECIBIDA EN EL ESTABLECIMIENTO RECEPTOR"; t3.cell(1,1).text = "N/A"
+    t3.cell(2,0).text = "CANTIDAD EN EXISTENCIA (STOCK) NO DISTRIBUIDA"; t3.cell(2,1).text = f"{datos.get('cantidad', '')} {datos.get('unidad', '')}"
+    t3.cell(3,0).text = "CANTIDAD DISTRIBUIDA A OTROS ESTABLECIMIENTOS RECEPTORES"; t3.cell(3,1).text = "0"
+    t3.cell(4,0).text = "REGISTRO DE DISTRIBUCIÓN"; t3.cell(4,1).text = "N/A"
+    t3.cell(5,0).text = "OTRAS OBSERVACIONES"; t3.cell(5,1).text = datos.get('observaciones', '')
+    t3.cell(6,0).text = "IDENTIFICACIÓN DE NOTIFICANTE y TELÉFONO DIRECTO"; t3.cell(6,1).text = f"{datos.get('director_tecnico', '')} - "
+    t3.cell(7,0).text = "FIRMA DE NOTIFICANTE"; t3.cell(7,1).text = "" 
     
     bio = io.BytesIO()
     doc.save(bio)
@@ -211,15 +174,10 @@ def generar_anexo_ii_docx(datos):
 
 def actualizar_bd_alertas(conn):
     cursor = conn.cursor()
-    columnas = [
-        "alerta_numero TEXT", "alerta_fecha TEXT", "titular_registro TEXT", 
-        "registro_sanitario TEXT", "principio_activo TEXT"
-    ]
+    columnas = ["alerta_numero TEXT", "alerta_fecha TEXT", "titular_registro TEXT", "registro_sanitario TEXT", "principio_activo TEXT"]
     for col in columnas:
-        try:
-            cursor.execute(f"ALTER TABLE productos ADD COLUMN {col}")
-        except sqlite3.OperationalError:
-            pass 
+        try: cursor.execute(f"ALTER TABLE productos ADD COLUMN {col}")
+        except sqlite3.OperationalError: pass 
     conn.commit()
 
 def render_ui(user_info: dict):
@@ -254,31 +212,63 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
+    # =======================================================
+    # NUEVO MENÚ DE NAVEGACIÓN SEPARADO POR MÓDULOS (ACORDEÓN)
+    # =======================================================
+    st.sidebar.markdown("### 📂 SELECCIONE MÓDULO")
+    opciones_modulos = ["💊 Gestión de Vencimientos", "🚨 Alertas Sanitarias", "⚙️ Reportes y Adm."]
+    modulo_sel = st.sidebar.selectbox("Módulos Principales", opciones_modulos, label_visibility="collapsed")
+    
+    st.sidebar.markdown(f"<hr style='margin: 0.5rem 0; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<p style='font-size: 14px; margin-bottom: 8px;'><b>Estás en:</b> {modulo_sel.split(' ', 1)[1]}</p>", unsafe_allow_html=True)
+    
     tabs_disponibles = []
-    if rol in ["admin", "bodega"]:
-        tabs_disponibles.append("📋 1. Informe Bodega")
-        tabs_disponibles.append("📤 Carga Masiva")
-    if rol in ["admin", "jefatura"]:
-        tabs_disponibles.append("🚨 Alertas Sanitarias")
-        tabs_disponibles.append("⚖️ 2. Canjes (Jefatura)")
-    if rol in ["admin", "registro"]:
-        tabs_disponibles.append("🚚 3. Registro/Prov.")
-    if rol in ["admin", "bodega"]:
-        tabs_disponibles.append("📦 4. Bulto/Ubicación")
-    if rol in ["admin", "jefatura"]:
-        tabs_disponibles.append("📜 5. Resolución/Cierre")
     
-    tabs_disponibles.append("🔍 Consolidado General")
-    tabs_disponibles.append("📊 Dashboard / Análisis")
+    # 1. Menú Vencimientos Normales
+    if modulo_sel == "💊 Gestión de Vencimientos":
+        if rol in ["admin", "bodega"]:
+            tabs_disponibles.append("📋 1. Informe Bodega")
+            tabs_disponibles.append("📤 Carga Masiva")
+        if rol in ["admin", "jefatura"]:
+            tabs_disponibles.append("⚖️ 2. Canjes (Jefatura)")
+        if rol in ["admin", "registro"]:
+            tabs_disponibles.append("🚚 3. Registro/Prov.")
+        if rol in ["admin", "bodega"]:
+            tabs_disponibles.append("📦 4. Bulto/Ubicación")
+        if rol in ["admin", "jefatura"]:
+            tabs_disponibles.append("📜 5. Resolución/Cierre")
+            
+    # 2. Menú Exclusivo Alertas Sanitarias
+    elif modulo_sel == "🚨 Alertas Sanitarias":
+        if rol in ["admin", "bodega"]:
+            tabs_disponibles.append("📋 1. Ingresar Nueva Alerta")
+        if rol in ["admin", "jefatura"]:
+            tabs_disponibles.append("🚨 Gestión Anexo II (Jefatura)")
+            
+    # 3. Menú Reportes y Administración
+    elif modulo_sel == "⚙️ Reportes y Adm.":
+        tabs_disponibles.append("🔍 Consolidado General")
+        tabs_disponibles.append("📊 Dashboard / Análisis")
+        if rol == "admin":
+            tabs_disponibles.append("👥 Gestión de Usuarios")
+
+    # Muestra los botones de navegación que correspondan al módulo elegido
+    tab_seleccionada = st.sidebar.radio("Pasos", tabs_disponibles, label_visibility="collapsed")
+
+    # =======================================================
+    # FLUJOS DE PANTALLA SEGÚN LA TAB SELECCIONADA
+    # =======================================================
     
-    if rol == "admin":
-        tabs_disponibles.append("👥 Gestión de Usuarios")
-
-    tab_seleccionada = st.sidebar.radio("Navegación", tabs_disponibles, label_visibility="collapsed")
-
-    # --- PASO 1 ---
-    if tab_seleccionada == "📋 1. Informe Bodega":
-        st.header("📋 Paso 1 — Informe de Bodega")
+    # --- PASO 1 (Se usa tanto para Vencimientos como para Alertas) ---
+    if tab_seleccionada in ["📋 1. Informe Bodega", "📋 1. Ingresar Nueva Alerta"]:
+        es_modulo_alerta = (tab_seleccionada == "📋 1. Ingresar Nueva Alerta")
+        
+        if es_modulo_alerta:
+            st.header("🚨 Ingreso Rápido de Alerta Sanitaria")
+            st.caption("Los productos ingresados aquí pasarán a Cuarentena inmediatamente.")
+        else:
+            st.header("📋 Paso 1 — Informe de Bodega")
+            
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
         
@@ -301,16 +291,26 @@ def render_ui(user_info: dict):
                 unidad_auto = item.get("unidad", "")
 
             st.divider()
-            motivo = st.selectbox("Motivo de informe *", ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"])
-            es_alerta = (motivo == "Alerta Sanitaria")
-            if es_alerta: st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
+            
+            # AUTOMATIZACIÓN DE MOTIVO
+            if es_modulo_alerta:
+                motivo = "Alerta Sanitaria"
+                es_alerta = True
+                st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
+            else:
+                motivo = st.selectbox("Motivo de informe *", ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"])
+                es_alerta = (motivo == "Alerta Sanitaria")
+                if es_alerta: 
+                    st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
 
             with st.form("form_paso1"):
                 col1, col2 = st.columns(2)
                 with col1:
                     codigo = st.text_input("Código Reyimen *", value=cod_auto)
                     descripcion = st.text_input("Descripción *", value=desc_auto)
-                    if not es_alerta: tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
+                    
+                    if not es_alerta:
+                        tipo_compra = st.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
                     else:
                         tipo_compra = "No Aplica (Alerta)"
                         alerta_numero = st.text_input("N° Alerta Sanitaria ISP *")
@@ -319,11 +319,15 @@ def render_ui(user_info: dict):
                 with col2:
                     unidad = st.text_input("Unidad *", value=unidad_auto)
                     cantidad = st.number_input("Cantidad *", min_value=0.0, step=1.0)
-                    if es_alerta: num_bulto_alerta = st.text_input("Número de Bulto Físico (Bodega Excluidos) *")
+                    
+                    if es_alerta:
+                        num_bulto_alerta = st.text_input("Número de Bulto Físico (Bodega Excluidos) *")
 
                 c3, c4 = st.columns(2)
-                with c3: vencimiento = st.date_input("Fecha de Vencimiento *")
-                with c4: lote = st.text_input("Lote *")
+                with c3:
+                    vencimiento = st.date_input("Fecha de Vencimiento *")
+                with c4:
+                    lote = st.text_input("Lote *")
                 
                 if st.form_submit_button("Guardar Paso 1"):
                     if not codigo or not descripcion or not lote or (es_alerta and (not alerta_numero or not num_bulto_alerta)):
@@ -331,6 +335,7 @@ def render_ui(user_info: dict):
                     else:
                         cursor = conn.cursor()
                         cursor.execute("SELECT id FROM productos WHERE codigo_reyimen=? AND lote=? AND bodega_origen=? AND estado_global IN ('En trámite', 'CUARENTENA')", (codigo, lote, bodega))
+                        
                         if cursor.fetchone():
                             st.warning("⚠️ ¡Atención! Este producto (mismo código, lote y bodega) ya fue ingresado y está activo.")
                         else:
@@ -346,6 +351,7 @@ def render_ui(user_info: dict):
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario'], paso_inicial, estado_inicial, ub_fisica, bulto, a_num, a_fec))
                             conn.commit()
+                            
                             st.success("✅ Producto registrado exitosamente en el sistema.")
                             time.sleep(1.5)
                             st.rerun()
@@ -393,10 +399,10 @@ def render_ui(user_info: dict):
                             time.sleep(1)
                             st.rerun()
 
-    # --- NUEVO: ALERTAS SANITARIAS (JEFATURA) ---
-    elif tab_seleccionada == "🚨 Alertas Sanitarias":
-        st.header("🚨 Gestión Exclusiva de Alertas Sanitarias")
-        st.markdown("Generación de **Anexo II** y notificación a proveedores para productos en Cuarentena.")
+    # --- PASO ALERTAS SANITARIAS (JEFATURA) ---
+    elif tab_seleccionada == "🚨 Gestión Anexo II (Jefatura)":
+        st.header("🚨 Gestión de Anexo II (Alertas Sanitarias)")
+        st.markdown("Revisa los productos en cuarentena y genera el documento legal de reporte.")
         
         df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND estado_global IN ('CUARENTENA', 'Alerta Notificada al Proveedor')", conn)
 
@@ -485,8 +491,17 @@ def render_ui(user_info: dict):
         df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
         if df.empty: st.info("No hay productos pendientes de canje comercial.")
         else:
+            hoy = datetime.now().date()
+            def calcular_meses(venc_str):
+                try:
+                    venc = datetime.strptime(str(venc_str), "%Y-%m-%d").date()
+                    return max(0.0, round((venc - hoy).days / 30.44, 1))
+                except: return 0.0
+
+            df["Meses Vencer"] = df["Vencimiento"].apply(calcular_meses)
             st.dataframe(df, hide_index=True, use_container_width=True)
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
+            
             with st.form("form_paso2"):
                 aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica", "Revisión área de registro - producto compra propia"])
                 if st.form_submit_button("Avanzar a Paso 3"):
@@ -539,7 +554,7 @@ def render_ui(user_info: dict):
             prod_id = st.selectbox("ID de Producto", df['ID'].tolist())
             with st.form("form_p4"):
                 ub_fisica, ub_comp = st.selectbox("Ubicación Física *", BODEGAS_PASO4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
-                bulto, obs = st.text_input("N° Bulto *"), st.text_area("Observaciones")
+                bulto, obs = st.text_input("N° Bulto *"), st.text_area("Observaciones Paso 4")
                 if st.form_submit_button("Avanzar a Paso 5"):
                     conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=?, paso_actual=5 WHERE id=?", (ub_fisica, ub_comp, bulto, obs, prod_id))
                     conn.commit()
@@ -580,7 +595,7 @@ def render_ui(user_info: dict):
                             conn.commit()
                             st.success("Guardado."); time.sleep(1); st.rerun()
 
-    # --- CONSOLIDADO & DASHBOARD & USUARIOS ---
+    # --- CONSOLIDADO Y ADMIN ---
     elif tab_seleccionada == "🔍 Consolidado General":
         st.header("🔍 Consolidado")
         st.dataframe(pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn), hide_index=True)
