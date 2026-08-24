@@ -69,12 +69,9 @@ def aplicar_estilo_tema(nombre_tema):
         .stApp {{ background-color: {tema['bg']} !important; color: {tema['text']} !important; }}
         [data-testid="stSidebar"] {{ background-color: {tema['card']} !important; border-right: 1px solid {tema['border']} !important; }}
         [data-testid="stSidebar"] *, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {{ color: {tema['text']} !important; font-weight: 600 !important; }}
-        
-        /* Ajuste de diseño para los menús */
         [data-testid="stSidebar"] div[role="radiogroup"] > label {{ padding: 10px 12px; background-color: transparent; border-radius: 8px; margin-bottom: 4px; transition: all 0.2s ease; }}
         [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {{ background-color: rgba(0, 0, 0, 0.04); transform: translateX(4px); }}
         [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {{ transform: scale(0.85); }}
-        
         .stMarkdown, .stText, h1, h2, h3, h4, h5, h6, label, p, span {{ color: {tema['text']} !important; }}
         [data-testid="stMetricValue"] {{ color: {tema['text']} !important; }}
         .stMarkdown p {{ margin-bottom: 0 !important; }}
@@ -212,9 +209,6 @@ def render_ui(user_info: dict):
 
     rol = user_info['rol']
     
-    # =======================================================
-    # NUEVO MENÚ DE NAVEGACIÓN SEPARADO POR MÓDULOS (ACORDEÓN)
-    # =======================================================
     st.sidebar.markdown("### 📂 SELECCIONE MÓDULO")
     opciones_modulos = ["💊 Gestión de Vencimientos", "🚨 Alertas Sanitarias", "⚙️ Reportes y Adm."]
     modulo_sel = st.sidebar.selectbox("Módulos Principales", opciones_modulos, label_visibility="collapsed")
@@ -252,13 +246,8 @@ def render_ui(user_info: dict):
         if rol == "admin":
             tabs_disponibles.append("👥 Gestión de Usuarios")
 
-    # Muestra los botones de navegación que correspondan al módulo elegido
     tab_seleccionada = st.sidebar.radio("Pasos", tabs_disponibles, label_visibility="collapsed")
 
-    # =======================================================
-    # FLUJOS DE PANTALLA SEGÚN LA TAB SELECCIONADA
-    # =======================================================
-    
     # --- PASO 1 (Se usa tanto para Vencimientos como para Alertas) ---
     if tab_seleccionada in ["📋 1. Informe Bodega", "📋 1. Ingresar Nueva Alerta"]:
         es_modulo_alerta = (tab_seleccionada == "📋 1. Ingresar Nueva Alerta")
@@ -290,18 +279,14 @@ def render_ui(user_info: dict):
                 desc_auto = item.get("descripcion", "")
                 unidad_auto = item.get("unidad", "")
 
-            st.divider()
-            
-            # AUTOMATIZACIÓN DE MOTIVO
+            # LOGICA AUTOMÁTICA (Sin campos desplegables innecesarios)
             if es_modulo_alerta:
                 motivo = "Alerta Sanitaria"
                 es_alerta = True
                 st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
             else:
-                motivo = st.selectbox("Motivo de informe *", ["Gestión pronto vencimiento", "Alerta Sanitaria", "Falla de calidad"])
-                es_alerta = (motivo == "Alerta Sanitaria")
-                if es_alerta: 
-                    st.error("🚨 MODO ALERTA SANITARIA: Se han activado los campos de urgencia. El producto será bloqueado y pasará a Cuarentena Inmediata.")
+                motivo = "Gestión pronto vencimiento"
+                es_alerta = False
 
             with st.form("form_paso1"):
                 col1, col2 = st.columns(2)
@@ -595,7 +580,7 @@ def render_ui(user_info: dict):
                             conn.commit()
                             st.success("Guardado."); time.sleep(1); st.rerun()
 
-    # --- CONSOLIDADO Y ADMIN ---
+    # --- CONSOLIDADO & ADMIN ---
     elif tab_seleccionada == "🔍 Consolidado General":
         st.header("🔍 Consolidado")
         st.dataframe(pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn), hide_index=True)
@@ -610,6 +595,41 @@ def render_ui(user_info: dict):
             m4.metric("Unid. Canjeadas", int(df_all[df_all['estado_final'] == 'Canjeado']['cantidad'].sum() if not df_all[df_all['estado_final'] == 'Canjeado'].empty else 0))
     elif tab_seleccionada == "👥 Gestión de Usuarios":
         st.header("👥 Gestión de Usuarios")
-        st.info("Módulo activo.")
+        tab_crear, tab_editar = st.tabs(["➕ Crear Usuario", "✏️ Editar / Eliminar"])
+        with tab_crear:
+            with st.form("form_nuevo_usuario"):
+                u_user, u_pass = st.text_input("Usuario"), st.text_input("Contraseña", type="password")
+                u_nombre, u_rol = st.text_input("Nombre"), st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"])
+                if st.form_submit_button("Crear"):
+                    conn.cursor().execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
+                    conn.commit()
+                    st.success("Usuario creado.")
+                    time.sleep(1)
+                    st.rerun()
+            st.dataframe(pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn), hide_index=True, use_container_width=True)
+        with tab_editar:
+            df_users_edit = pd.read_sql_query("SELECT * FROM usuarios", conn)
+            if not df_users_edit.empty:
+                id_mod = st.selectbox("ID a Modificar", df_users_edit['id'].tolist())
+                user_data = conn.cursor().execute("SELECT * FROM usuarios WHERE id=?", (id_mod,)).fetchone()
+                if user_data:
+                    with st.form("form_editar_usuario"):
+                        new_u_nombre, new_u_user = st.text_input("Nombre", value=user_data['nombre_completo']), st.text_input("Usuario", value=user_data['usuario'])
+                        new_u_rol, new_u_estado = st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"]), st.selectbox("Estado", ["Activo", "Inactivo"])
+                        new_u_pass = st.text_input("Nueva Contraseña (Opcional)", type="password")
+                        b1, b2 = st.columns(2)
+                        if b1.form_submit_button("Guardar"):
+                            if new_u_pass.strip(): conn.cursor().execute("UPDATE usuarios SET usuario=?, password=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_pass, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            else: conn.cursor().execute("UPDATE usuarios SET usuario=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            conn.commit()
+                            st.success("Usuario actualizado.")
+                            time.sleep(1)
+                            st.rerun()
+                        if b2.form_submit_button("Eliminar"):
+                            conn.cursor().execute("DELETE FROM usuarios WHERE id=?", (id_mod,))
+                            conn.commit()
+                            st.warning("Usuario eliminado.")
+                            time.sleep(1)
+                            st.rerun()
 
     conn.close()
