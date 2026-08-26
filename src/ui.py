@@ -9,6 +9,7 @@ import base64
 import sqlite3
 import streamlit as st
 import pandas as pd
+import altair as alt
 from datetime import datetime, timedelta
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -222,7 +223,6 @@ def render_ui(user_info: dict):
     
     tabs_disponibles = []
     
-    # --- ACTUALIZACIÓN DE PERMISOS DE ROLES ---
     if modulo_sel == "💊 Gestión de Vencimientos":
         if rol in ["admin", "jefatura_admin", "bodega"]:
             tabs_disponibles.extend(["📋 1. Informe Bodega", "📤 Carga Masiva"])
@@ -235,15 +235,17 @@ def render_ui(user_info: dict):
         if rol in ["admin", "jefatura_admin", "jefatura"]: 
             tabs_disponibles.append("📜 5. Resolución/Cierre")
             
+    # --- NUEVA ESTRUCTURA PARA ALERTAS SANITARIAS ---
     elif modulo_sel == "🚨 Alertas Sanitarias":
         if rol in ["admin", "jefatura_admin", "bodega"]: 
             tabs_disponibles.append("📋 1. Ingresar Nueva Alerta")
         if rol in ["admin", "jefatura_admin", "jefatura"]: 
-            tabs_disponibles.append("🚨 Gestión Anexo II (Jefatura)")
+            tabs_disponibles.append("🚨 2. Gestión Anexo II")
+        if rol in ["admin", "jefatura_admin", "bodega"]: 
+            tabs_disponibles.append("📦 3. Bulto/Ubicación (Alerta)")
             
     elif modulo_sel == "⚙️ Reportes y Adm.":
         tabs_disponibles.extend(["🔍 Consolidado General", "📊 Dashboard / Análisis"])
-        # Solo admin y jefatura_admin ven la gestión de usuarios
         if rol in ["admin", "jefatura_admin"]: 
             tabs_disponibles.append("👥 Gestión de Usuarios")
 
@@ -254,12 +256,12 @@ def render_ui(user_info: dict):
     tema_sel = st.sidebar.selectbox("Tema Visual", opciones_temas, index=idx_tema, label_visibility="collapsed", key="tema_sidebar")
     if tema_sel != tema_actual: st.session_state["tema_seleccionado"] = tema_sel; st.rerun()
 
-    # --- PASO 1 ---
+    # --- PASO 1 (VENCIMIENTOS Y ALERTAS) ---
     if tab_seleccionada in ["📋 1. Informe Bodega", "📋 1. Ingresar Nueva Alerta"]:
         es_modulo_alerta = (tab_seleccionada == "📋 1. Ingresar Nueva Alerta")
         if es_modulo_alerta: 
             st.markdown("## 🚨 Ingreso Rápido de Alerta Sanitaria")
-            st.caption("Los productos pasarán a Cuarentena inmediatamente.")
+            st.caption("Los productos pasarán a Cuarentena e irán al Anexo II.")
         else: 
             st.markdown("## 📋 Paso 1 — Informe de Bodega")
             
@@ -297,25 +299,24 @@ def render_ui(user_info: dict):
                 if es_modulo_alerta:
                     tipo_compra = "No Aplica (Alerta)"
                     alerta_numero = c1.text_input("N° Alerta Sanitaria ISP *")
-                    num_bulto_alerta = c2.text_input("Número de Bulto Físico (Bodega Excluidos) *")
-                    alerta_fecha = c1.date_input("Fecha de Alerta ISP *")
-                    vencimiento = c2.date_input("Fecha de Vencimiento *")
-                    lote = c1.text_input("Lote *")
+                    alerta_fecha = c2.date_input("Fecha de Alerta ISP *")
+                    vencimiento = c1.date_input("Fecha de Vencimiento *")
+                    lote = c2.text_input("Lote *")
                 else:
                     tipo_compra = c1.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
                     vencimiento = c2.date_input("Fecha de Vencimiento *")
                     lote = c1.text_input("Lote *")
                 
                 if st.form_submit_button("Guardar Paso 1"):
-                    if not codigo or not descripcion or not lote or (es_modulo_alerta and (not alerta_numero or not num_bulto_alerta)):
+                    if not codigo or not descripcion or not lote or (es_modulo_alerta and not alerta_numero):
                         st.error("Complete todos los campos obligatorios (*)")
                     else:
                         conn.cursor().execute("SELECT id FROM productos WHERE codigo_reyimen=? AND lote=? AND bodega_origen=? AND estado_global IN ('En trámite', 'CUARENTENA')", (codigo, lote, bodega))
                         if conn.cursor().fetchone(): st.warning("⚠️ Este producto ya fue ingresado y está activo.")
                         else:
                             estado_inicial = 'CUARENTENA' if es_modulo_alerta else 'En trámite'
-                            ub_fisica = "Bodega de Excluidos" if es_modulo_alerta else ""
-                            bulto = num_bulto_alerta if es_modulo_alerta else ""
+                            ub_fisica = ""
+                            bulto = ""
                             a_num = alerta_numero if es_modulo_alerta else ""
                             a_fec = str(alerta_fecha) if es_modulo_alerta else ""
                             conn.cursor().execute("""
@@ -374,7 +375,7 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("DELETE FROM productos WHERE id=?", (id_mod,))
                                 conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
-    # --- PASO 2 ---
+    # --- PASO 2 (VENCIMIENTOS) ---
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
         st.markdown("## ⚖️ Paso 2 — Gestión de Canjes")
         df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
@@ -435,7 +436,7 @@ def render_ui(user_info: dict):
                         time.sleep(2)
                         st.rerun()
 
-    # --- PASO 3 ---
+    # --- PASO 3 (VENCIMIENTOS) ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
         st.markdown("## 🚚 Paso 3 — Registro y Proveedor")
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso", "🔄 Seguimiento de Trámites"])
@@ -532,7 +533,7 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("UPDATE productos SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=? WHERE id=?", (u_prov, u_doc, u_tram, u_obs, id_seg))
                                 conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
 
-    # --- PASO 4 ---
+    # --- PASO 4 (VENCIMIENTOS) ---
     elif tab_seleccionada == "📦 4. Bulto/Ubicación":
         st.markdown("## 📦 Paso 4 — Bulto y Ubicaciones")
         tab_p4_nuevo, tab_p4_seg = st.tabs(["➕ Asignar Nueva Ubicación", "🔄 Seguimiento de Bultos"])
@@ -619,13 +620,12 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
                                 conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
 
-    # --- PASO 5 ---
+    # --- PASO 5 (VENCIMIENTOS) ---
     elif tab_seleccionada == "📜 5. Resolución/Cierre":
         st.markdown("## 📜 Paso 5 — Resolución y Cierre")
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre con Carta de Canje", "🟢 Cierre sin Carta de Canje"])
         
         with tab_p5_cierre:
-            # Solo productos CON canje ("Aplica")
             df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5.empty: 
@@ -668,7 +668,6 @@ def render_ui(user_info: dict):
                             conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
                             
         with tab_p5_sin_canje:
-            # Solo productos SIN canje ("No aplica" o compras propias)
             df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5_sc.empty:
@@ -717,11 +716,11 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=?, resolucion_numero=?, estado_final=?, estado_global='Concluido' WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, num_res_sc, estado_fin_sc, id_sc))
                                 conn.commit(); st.success("Archivado con éxito."); time.sleep(1.5); st.rerun()
 
-    # --- ALERTAS, CARGA MASIVA Y ADMIN ---
-    elif tab_seleccionada == "🚨 Gestión Anexo II (Jefatura)":
-        st.markdown("## 🚨 Gestión de Anexo II (Alertas Sanitarias)")
-        df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND estado_global IN ('CUARENTENA', 'Alerta Notificada al Proveedor')", conn)
-        if df_alertas.empty: st.info("No hay Alertas Sanitarias activas pendientes de gestión.")
+    # --- PASO 2 Y 3 (ALERTAS SANITARIAS) ---
+    elif tab_seleccionada == "🚨 2. Gestión Anexo II":
+        st.markdown("## 🚨 Paso 2 — Anexo II (Alertas Sanitarias)")
+        df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 2", conn)
+        if df_alertas.empty: st.info("No hay Alertas Sanitarias pendientes de Anexo II.")
         else:
             st.dataframe(df_alertas, hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
             id_alerta = st.selectbox("Seleccione Alerta a gestionar", df_alertas['ID'].tolist())
@@ -740,14 +739,90 @@ def render_ui(user_info: dict):
                     if st.form_submit_button("💾 Guardar Datos para Anexo II"):
                         conn.cursor().execute("UPDATE productos SET principio_activo=?, titular_registro=?, registro_sanitario=?, proveedor=?, observacion_paso2=? WHERE id=?", (principio_activo, titular, reg_sanitario, proveedor, obs_alerta, id_alerta))
                         conn.commit(); st.success("Datos guardados."); time.sleep(1); st.rerun()
+                
                 if prod_alerta['titular_registro'] and prod_alerta['registro_sanitario']:
                     datos_docx = { "descripcion": prod_alerta['descripcion'], "principio_activo": prod_alerta['principio_activo'], "titular": prod_alerta['titular_registro'], "registro_sanitario": prod_alerta['registro_sanitario'], "lote": prod_alerta['lote'], "representante_legal": "Representante Hospital", "director_tecnico": user_info['nombre_completo'], "proveedor": prod_alerta['proveedor'], "cantidad": prod_alerta['cantidad'], "unidad": prod_alerta['unidad'], "observaciones": prod_alerta['observacion_paso2'] }
                     st.download_button("📄 Descargar Documento Anexo II (.docx)", data=generar_anexo_ii_docx(datos_docx), file_name=f"ANEXO_II_{prod_alerta['lote']}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                    if prod_alerta['estado_global'] != 'Alerta Notificada al Proveedor':
-                        if st.button("✅ Marcar como 'Notificado al Proveedor'"):
-                            conn.cursor().execute("UPDATE productos SET estado_global='Alerta Notificada al Proveedor', paso_actual=5 WHERE id=?", (id_alerta,))
-                            conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
+                    if st.button("✅ Marcar como 'Notificado al Proveedor' y Enviar a Bulto"):
+                        conn.cursor().execute("UPDATE productos SET estado_global='Alerta Notificada al Proveedor', paso_actual=3 WHERE id=?", (id_alerta,))
+                        conn.commit(); st.success("Avanzado al Paso 3."); time.sleep(1.5); st.rerun()
 
+    elif tab_seleccionada == "📦 3. Bulto/Ubicación (Alerta)":
+        st.markdown("## 📦 Paso 3 — Bulto y Ubicaciones (Alertas Sanitarias)")
+        tab_p3a_nuevo, tab_p3a_seg = st.tabs(["➕ Asignar Bulto a Alerta", "🔄 Seguimiento de Alertas Físicas"])
+        
+        with tab_p3a_nuevo:
+            df_p3a = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 3 AND estado_global != 'Concluido'", conn)
+            
+            if df_p3a.empty: 
+                st.info("No hay alertas pendientes de asignación de bulto.")
+            else:
+                st.markdown("#### 🔍 Filtros de Búsqueda")
+                filtro_codigo = st.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p3a_n")
+                
+                df_filtrado = df_p3a.copy()
+                if filtro_codigo: df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado.empty:
+                    st.warning("No hay productos que coincidan con los filtros.")
+                else:
+                    st.dataframe(df_filtrado, hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
+                    
+                    opciones_id = df_filtrado['ID'].tolist()
+                    formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
+                    
+                    st.markdown("#### ⚙️ Asignación de Ubicación y Cierre de Alerta")
+                    prod_id = st.selectbox("Seleccione la alerta a gestionar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p3a_n")
+                    
+                    with st.form("form_p3a"):
+                        ub_fisica, ub_comp = st.selectbox("Ubicación Física *", OPCIONES_FISICA_P4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
+                        bulto = st.text_input("N° Bulto *")
+                        obs = st.text_area("Observaciones Finales (Opcional)")
+                        if st.form_submit_button("Guardar Ubicación y Finalizar Alerta"):
+                            conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=?, paso_actual=4, estado_global='Concluido', estado_final='Retirado por Alerta Sanitaria' WHERE id=?", (ub_fisica, ub_comp, bulto, obs, prod_id))
+                            conn.commit(); st.success("Alerta Sanitaria finalizada y archivada."); time.sleep(1.5); st.rerun()
+
+        with tab_p3a_seg:
+            df_seg = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, ubicacion_fisica AS Física, numero_bulto AS Bulto FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual >= 3 AND ubicacion_fisica != '' AND estado_global = 'Concluido'", conn)
+            
+            if df_seg.empty: 
+                st.info("No hay bultos de alertas para seguimiento.")
+            else:
+                st.markdown("#### 🔍 Filtros de Búsqueda")
+                filtro_codigo_seg = st.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p3a_s")
+                
+                df_filtrado_seg = df_seg.copy()
+                if filtro_codigo_seg: df_filtrado_seg = df_filtrado_seg[df_filtrado_seg["Código"].astype(str).str.contains(filtro_codigo_seg, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado_seg.empty:
+                    st.warning("No hay bultos que coincidan con los filtros.")
+                else:
+                    st.dataframe(df_filtrado_seg, hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
+                    
+                    opciones_id_seg = df_filtrado_seg['ID'].tolist()
+                    formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
+                    
+                    st.markdown("#### ⚙️ Modificación de Bulto Existente")
+                    id_seg = st.selectbox("Seleccione el bulto a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3a_s")
+                    
+                    prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
+                    if prod_seg:
+                        with st.form("form_p3a_actualizar"):
+                            idx_fis = OPCIONES_FISICA_P4.index(prod_seg['ubicacion_fisica']) if prod_seg['ubicacion_fisica'] in OPCIONES_FISICA_P4 else 0
+                            idx_comp = BODEGAS_PASO4.index(prod_seg['ubicacion_computacional']) if prod_seg['ubicacion_computacional'] in BODEGAS_PASO4 else 0
+                            
+                            u_fisica = st.selectbox("Ubicación Física", OPCIONES_FISICA_P4, index=idx_fis)
+                            u_comp = st.selectbox("Ubicación Computacional", BODEGAS_PASO4, index=idx_comp)
+                            u_bulto = st.text_input("N° Bulto", value=prod_seg['numero_bulto'] or "")
+                            u_obs = st.text_area("Observaciones", value=prod_seg['observacion_paso4'] or "")
+                            
+                            if st.form_submit_button("Actualizar Bulto"):
+                                conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs, id_seg))
+                                conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
+
+    # --- CARGA MASIVA Y REPORTES ---
     elif tab_seleccionada == "📤 Carga Masiva":
         st.markdown("## 📤 Carga Masiva de Productos")
         df_plantilla = pd.DataFrame([{"BODEGA ORIGEN": "Bodega AZ09 (Fármacos)", "TIPO PRODUCTO": "Fármaco", "CÓDIGO REYIMEN": "1365", "DESCRIPCIÓN": "BUPIVACAINA", "TIPO COMPRA": "CENABAST", "UNIDAD": "FRASCO", "CANTIDAD": 100, "FECHA VENCIMIENTO": "2026-10-31", "LOTE": "L12345"}])
@@ -797,11 +872,31 @@ def render_ui(user_info: dict):
             
             st.markdown("#### 🚦 Semáforo de Riesgo (Vencimientos)")
             
-            chart_data = pd.DataFrame({
-                "Nivel de Riesgo": ["1. Crítico (Roja)", "2. Tramitación (Amarilla)", "3. Seguro (Verde)"],
+            source = pd.DataFrame({
+                "Nivel": ["Crítico (Roja)", "Tramitación (Amarilla)", "Seguro (Verde)"],
                 "Cantidad": [rojas, amarillas, verdes]
-            }).set_index("Nivel de Riesgo")
-            st.bar_chart(chart_data)
+            })
+            
+            if source["Cantidad"].sum() > 0:
+                source = source[source["Cantidad"] > 0]
+                
+                grafico_pastel = alt.Chart(source).mark_arc(innerRadius=60).encode(
+                    theta=alt.Theta(field="Cantidad", type="quantitative"),
+                    color=alt.Color(
+                        field="Nivel", 
+                        type="nominal", 
+                        scale=alt.Scale(
+                            domain=["Crítico (Roja)", "Tramitación (Amarilla)", "Seguro (Verde)"], 
+                            range=["#ef4444", "#f59e0b", "#10b981"]
+                        ),
+                        legend=alt.Legend(title="Estado", orient="right")
+                    ),
+                    tooltip=['Nivel', 'Cantidad']
+                ).properties(height=350)
+                
+                st.altair_chart(grafico_pastel, use_container_width=True)
+            else:
+                st.info("Aún no hay productos registrados para generar el gráfico.")
             
             sem1, sem2, sem3 = st.columns(3)
             sem1.metric("🔴 Alerta Roja (Crítico)", rojas)
@@ -826,7 +921,6 @@ def render_ui(user_info: dict):
         with tab_crear:
             with st.form("form_nuevo_usuario"):
                 u_user, u_pass = st.text_input("Usuario"), st.text_input("Contraseña", type="password")
-                # --- NUEVO: Menú de creación con nuevo rol ---
                 u_nombre, u_rol = st.text_input("Nombre"), st.selectbox("Rol", ["admin", "jefatura_admin", "jefatura", "registro", "bodega"])
                 if st.form_submit_button("Crear"):
                     conn.cursor().execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
@@ -850,7 +944,6 @@ def render_ui(user_info: dict):
                     with st.form("form_editar_usuario"):
                         new_u_nombre, new_u_user = st.text_input("Nombre", value=user_data['nombre_completo']), st.text_input("Usuario", value=user_data['usuario'])
                         
-                        # --- NUEVO: Menú de edición con nuevo rol y validación de índice ---
                         lista_roles = ["admin", "jefatura_admin", "jefatura", "registro", "bodega"]
                         idx_rol = lista_roles.index(user_data['rol']) if user_data['rol'] in lista_roles else 0
                         
