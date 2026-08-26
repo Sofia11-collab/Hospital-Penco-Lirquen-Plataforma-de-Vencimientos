@@ -221,19 +221,31 @@ def render_ui(user_info: dict):
     st.sidebar.markdown(f"<p style='font-size: 14px; margin-bottom: 8px;'><b>Estás en:</b> {modulo_sel.split(' ', 1)[1]}</p>", unsafe_allow_html=True)
     
     tabs_disponibles = []
+    
+    # --- ACTUALIZACIÓN DE PERMISOS DE ROLES ---
     if modulo_sel == "💊 Gestión de Vencimientos":
-        if rol in ["admin", "bodega"]:
+        if rol in ["admin", "jefatura_admin", "bodega"]:
             tabs_disponibles.extend(["📋 1. Informe Bodega", "📤 Carga Masiva"])
-        if rol in ["admin", "jefatura"]: tabs_disponibles.append("⚖️ 2. Canjes (Jefatura)")
-        if rol in ["admin", "registro"]: tabs_disponibles.append("🚚 3. Registro/Prov.")
-        if rol in ["admin", "bodega"]: tabs_disponibles.append("📦 4. Bulto/Ubicación")
-        if rol in ["admin", "jefatura"]: tabs_disponibles.append("📜 5. Resolución/Cierre")
+        if rol in ["admin", "jefatura_admin", "jefatura"]: 
+            tabs_disponibles.append("⚖️ 2. Canjes (Jefatura)")
+        if rol in ["admin", "jefatura_admin", "registro"]: 
+            tabs_disponibles.append("🚚 3. Registro/Prov.")
+        if rol in ["admin", "jefatura_admin", "bodega"]: 
+            tabs_disponibles.append("📦 4. Bulto/Ubicación")
+        if rol in ["admin", "jefatura_admin", "jefatura"]: 
+            tabs_disponibles.append("📜 5. Resolución/Cierre")
+            
     elif modulo_sel == "🚨 Alertas Sanitarias":
-        if rol in ["admin", "bodega"]: tabs_disponibles.append("📋 1. Ingresar Nueva Alerta")
-        if rol in ["admin", "jefatura"]: tabs_disponibles.append("🚨 Gestión Anexo II (Jefatura)")
+        if rol in ["admin", "jefatura_admin", "bodega"]: 
+            tabs_disponibles.append("📋 1. Ingresar Nueva Alerta")
+        if rol in ["admin", "jefatura_admin", "jefatura"]: 
+            tabs_disponibles.append("🚨 Gestión Anexo II (Jefatura)")
+            
     elif modulo_sel == "⚙️ Reportes y Adm.":
         tabs_disponibles.extend(["🔍 Consolidado General", "📊 Dashboard / Análisis"])
-        if rol == "admin": tabs_disponibles.append("👥 Gestión de Usuarios")
+        # Solo admin y jefatura_admin ven la gestión de usuarios
+        if rol in ["admin", "jefatura_admin"]: 
+            tabs_disponibles.append("👥 Gestión de Usuarios")
 
     tab_seleccionada = st.sidebar.radio("Pasos", tabs_disponibles, label_visibility="collapsed")
 
@@ -613,6 +625,7 @@ def render_ui(user_info: dict):
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre con Carta de Canje", "🟢 Cierre sin Carta de Canje"])
         
         with tab_p5_cierre:
+            # Solo productos CON canje ("Aplica")
             df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5.empty: 
@@ -655,6 +668,7 @@ def render_ui(user_info: dict):
                             conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
                             
         with tab_p5_sin_canje:
+            # Solo productos SIN canje ("No aplica" o compras propias)
             df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5_sc.empty:
@@ -812,7 +826,8 @@ def render_ui(user_info: dict):
         with tab_crear:
             with st.form("form_nuevo_usuario"):
                 u_user, u_pass = st.text_input("Usuario"), st.text_input("Contraseña", type="password")
-                u_nombre, u_rol = st.text_input("Nombre"), st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"])
+                # --- NUEVO: Menú de creación con nuevo rol ---
+                u_nombre, u_rol = st.text_input("Nombre"), st.selectbox("Rol", ["admin", "jefatura_admin", "jefatura", "registro", "bodega"])
                 if st.form_submit_button("Crear"):
                     conn.cursor().execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
                     conn.commit()
@@ -834,7 +849,12 @@ def render_ui(user_info: dict):
                 if user_data:
                     with st.form("form_editar_usuario"):
                         new_u_nombre, new_u_user = st.text_input("Nombre", value=user_data['nombre_completo']), st.text_input("Usuario", value=user_data['usuario'])
-                        new_u_rol, new_u_estado = st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"], index=["admin", "jefatura", "registro", "bodega"].index(user_data['rol'])), st.selectbox("Estado", ["Activo", "Inactivo"], index=["Activo", "Inactivo"].index(user_data['estado']))
+                        
+                        # --- NUEVO: Menú de edición con nuevo rol y validación de índice ---
+                        lista_roles = ["admin", "jefatura_admin", "jefatura", "registro", "bodega"]
+                        idx_rol = lista_roles.index(user_data['rol']) if user_data['rol'] in lista_roles else 0
+                        
+                        new_u_rol, new_u_estado = st.selectbox("Rol", lista_roles, index=idx_rol), st.selectbox("Estado", ["Activo", "Inactivo"], index=["Activo", "Inactivo"].index(user_data['estado']))
                         new_u_pass = st.text_input("Nueva Contraseña (Opcional)", type="password")
                         b1, b2 = st.columns(2)
                         if b1.form_submit_button("Guardar Cambios"):
