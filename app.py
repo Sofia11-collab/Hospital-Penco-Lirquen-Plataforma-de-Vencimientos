@@ -1,8 +1,7 @@
 import streamlit as st
 import os
 import base64
-from src.database import init_db
-from src.auth import authenticate_user
+from src.database import init_db, get_connection
 from src.ui import render_ui
 
 # Configuración inicial de la página
@@ -14,6 +13,23 @@ def get_base64_image(image_path):
         with open(image_path, "rb") as img_file:
             return base64.b64encode(img_file.read()).decode()
     return ""
+
+def authenticate_user(username, password):
+    """Verifica las credenciales directamente en la base de datos"""
+    conn = get_connection()
+    user = conn.cursor().execute(
+        "SELECT usuario, rol, nombre_completo FROM usuarios WHERE usuario=? AND password=? AND estado='Activo'", 
+        (username, password)
+    ).fetchone()
+    conn.close()
+    
+    if user:
+        return {
+            "usuario": user["usuario"],
+            "rol": user["rol"],
+            "nombre_completo": user["nombre_completo"]
+        }
+    return None
 
 def main():
     init_db()
