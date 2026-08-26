@@ -325,7 +325,11 @@ def render_ui(user_info: dict):
         if df.empty: 
             st.info("No hay productos pendientes de canje comercial.")
         else:
+            hoy = datetime.now().date()
+            df["Meses Vencer"] = df["Vencimiento"].apply(lambda v: max(0.0, round((datetime.strptime(str(v), "%Y-%m-%d").date() - hoy).days / 30.44, 1)) if pd.notnull(v) else 0.0)
             df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+            columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote", "Vencimiento"]
+            df = df[columnas_orden]
             
             st.markdown("### 🔍 Filtros de Búsqueda")
             col_f1, col_f2 = st.columns(2)
@@ -338,7 +342,7 @@ def render_ui(user_info: dict):
             
             st.markdown("<br>", unsafe_allow_html=True)
             if df_filtrado.empty:
-                st.warning("No hay productos pendientes que coincidan con los filtros.")
+                st.warning("No hay productos pendientes que coincidan con los filtros seleccionados.")
             else:
                 cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote"]
                 st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
@@ -567,7 +571,14 @@ def render_ui(user_info: dict):
                     
                     with st.form("form_p5"):
                         num_res = st.text_input("N° Resolución o Documento *")
-                        estado_fin = st.selectbox("Estado Final *", ["Retirado por Alerta Sanitaria", "Destruido", "Concluido", "Dado de baja", "Canjeado"])
+                        # --- NUEVO: Opciones detalladas de cierre ---
+                        estado_fin = st.selectbox("Estado Final *", [
+                            "Canjeado - reposición del producto", 
+                            "Canjeado - nota de credito recibida", 
+                            "Producto no canjeado", 
+                            "Producto dado de baja",
+                            "Retirado por Alerta Sanitaria"
+                        ])
                         obs = st.text_area("Resolución")
                         if st.form_submit_button("Finalizar y Archivar"):
                             conn.cursor().execute("UPDATE productos SET resolucion_numero=?, estado_final=?, observacion_paso5=?, estado_global='Concluido' WHERE id=?", (num_res, estado_fin, obs, prod_id))
@@ -686,7 +697,12 @@ def render_ui(user_info: dict):
             m1.metric("Trámites Totales", len(df_all))
             m2.metric("En Trámite Activo", len(df_all[df_all['estado_global'].isin(['En trámite', 'CUARENTENA', 'Alerta Notificada al Proveedor'])]))
             m3.metric("Concluidos", len(df_all[df_all['estado_global'] == 'Concluido']))
-            m4.metric("Unid. Canjeadas", int(df_all[df_all['estado_final'] == 'Canjeado']['cantidad'].sum() if not df_all[df_all['estado_final'] == 'Canjeado'].empty else 0))
+            
+            # --- NUEVO: Actualización del contador de Unidades Canjeadas ---
+            estados_canje = ['Canjeado - reposición del producto', 'Canjeado - nota de credito recibida']
+            canjeadas_df = df_all[df_all['estado_final'].isin(estados_canje)]
+            unidades_canjeadas = int(canjeadas_df['cantidad'].sum()) if not canjeadas_df.empty else 0
+            m4.metric("Unid. Canjeadas", unidades_canjeadas)
             
     elif tab_seleccionada == "👥 Gestión de Usuarios":
         st.header("👥 Gestión de Usuarios")
