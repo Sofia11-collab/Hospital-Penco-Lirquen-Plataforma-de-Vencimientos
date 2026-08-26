@@ -292,30 +292,55 @@ def render_ui(user_info: dict):
 
         with tab_p1_editar:
             st.subheader("Registros Ingresados en Paso 1 (Modificables)")
-            df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'", conn)
-            if df_p1.empty: st.info("No hay registros.")
+            df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'", conn)
+            
+            if df_p1.empty: 
+                st.info("No hay registros modificables.")
             else:
-                st.dataframe(df_p1, hide_index=True, use_container_width=True, height=180)
-                id_mod = st.selectbox("Seleccione ID", df_p1['ID'].tolist())
-                prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
-                if prod_data:
-                    with st.form("form_editar_p1"):
-                        st.markdown(f"**Editando ID #{id_mod}**")
-                        c_e1, c_e2 = st.columns(2)
-                        idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
-                        new_bodega = c_e1.selectbox("Bodega Origen *", BODEGAS_OFICIALES, index=idx_bodega)
-                        new_cantidad = c_e2.number_input("Cantidad *", value=float(prod_data['cantidad']), min_value=0.0, step=1.0)
-                        new_lote = c_e1.text_input("Lote *", value=prod_data['lote'])
-                        try: fecha_init = datetime.strptime(prod_data['vencimiento'], "%Y-%m-%d").date()
-                        except: fecha_init = datetime.now().date()
-                        new_vencimiento = c_e2.date_input("Fecha de Vencimiento *", value=fecha_init)
-                        b1, b2 = st.columns(2)
-                        if b1.form_submit_button("💾 Guardar"):
-                            conn.cursor().execute("UPDATE productos SET bodega_origen=?, cantidad=?, lote=?, vencimiento=? WHERE id=?", (new_bodega, new_cantidad, new_lote, str(new_vencimiento), id_mod))
-                            conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
-                        if b2.form_submit_button("🗑️ Eliminar"):
-                            conn.cursor().execute("DELETE FROM productos WHERE id=?", (id_mod,))
-                            conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
+                # Calculamos semáforo
+                df_p1["Nivel Alerta"] = df_p1.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+                
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)", "🚨 ALERTA (ISP)"], placeholder="Seleccione colores...", key="sem_p1_e")
+                filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p1_e")
+                
+                df_filtrado = df_p1.copy()
+                if filtro_semaforo: df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
+                if filtro_codigo: df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado.empty:
+                    st.warning("No hay registros que coincidan con los filtros.")
+                else:
+                    cols_mostrar = ["ID", "Nivel Alerta", "Bodega", "Código", "Descripción", "Lote", "Motivo", "Estado"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id = df_filtrado['ID'].tolist()
+                    formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
+                    
+                    st.markdown("### ⚙️ Editar Registro")
+                    id_mod = st.selectbox("Seleccione el registro filtrado que desea modificar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p1_e")
+                    
+                    prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
+                    if prod_data:
+                        with st.form("form_editar_p1"):
+                            st.markdown(f"**Editando ID #{id_mod}**")
+                            c_e1, c_e2 = st.columns(2)
+                            idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
+                            new_bodega = c_e1.selectbox("Bodega Origen *", BODEGAS_OFICIALES, index=idx_bodega)
+                            new_cantidad = c_e2.number_input("Cantidad *", value=float(prod_data['cantidad']), min_value=0.0, step=1.0)
+                            new_lote = c_e1.text_input("Lote *", value=prod_data['lote'])
+                            try: fecha_init = datetime.strptime(prod_data['vencimiento'], "%Y-%m-%d").date()
+                            except: fecha_init = datetime.now().date()
+                            new_vencimiento = c_e2.date_input("Fecha de Vencimiento *", value=fecha_init)
+                            b1, b2 = st.columns(2)
+                            if b1.form_submit_button("💾 Guardar Cambios"):
+                                conn.cursor().execute("UPDATE productos SET bodega_origen=?, cantidad=?, lote=?, vencimiento=? WHERE id=?", (new_bodega, new_cantidad, new_lote, str(new_vencimiento), id_mod))
+                                conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
+                            if b2.form_submit_button("🗑️ Eliminar Registro"):
+                                conn.cursor().execute("DELETE FROM productos WHERE id=?", (id_mod,))
+                                conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
     # --- PASO 2 ---
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
@@ -571,7 +596,6 @@ def render_ui(user_info: dict):
                     
                     with st.form("form_p5"):
                         num_res = st.text_input("N° Resolución o Documento *")
-                        # --- NUEVO: Opciones detalladas de cierre ---
                         estado_fin = st.selectbox("Estado Final *", [
                             "Canjeado - reposición del producto", 
                             "Canjeado - nota de credito recibida", 
