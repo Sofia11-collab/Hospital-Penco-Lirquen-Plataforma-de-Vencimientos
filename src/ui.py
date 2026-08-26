@@ -402,7 +402,6 @@ def render_ui(user_info: dict):
                     obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
                     archivo_adjunto = st.file_uploader("📎 Adjuntar Carta de Canje o Respaldo (Opcional)", type=["pdf", "png", "jpg", "jpeg", "docx", "doc"])
                     
-                    # --- NUEVO: Atajo si NO aplica canje ---
                     if st.form_submit_button("Guardar y Avanzar"):
                         siguiente_paso = 4 if aplica_canje == "No aplica" else 3
                         
@@ -610,19 +609,20 @@ def render_ui(user_info: dict):
     # --- PASO 5 ---
     elif tab_seleccionada == "📜 5. Resolución/Cierre":
         st.markdown("## 📜 Paso 5 — Resolución y Cierre")
-        tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre General", "🟢 Sin Carta de Canje"])
+        tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre con Carta de Canje", "🟢 Cierre sin Carta de Canje"])
         
         with tab_p5_cierre:
-            df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido'", conn)
+            # Solo productos CON canje ("Aplica")
+            df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5.empty: 
-                st.info("No hay productos pendientes de cierre.")
+                st.info("No hay productos con canje pendientes de cierre.")
             else:
                 df_p5["Nivel Alerta"] = df_p5.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
                 st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
-                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)", "🚨 ALERTA (ISP)"], placeholder="Seleccione colores...", key="sem_p5_c")
+                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p5_c")
                 filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p5_c")
                 
                 df_filtrado = df_p5.copy()
@@ -647,8 +647,7 @@ def render_ui(user_info: dict):
                         estado_fin = st.selectbox("Estado Final *", [
                             "Canjeado - reposición del producto", 
                             "Canjeado - nota de credito recibida", 
-                            "Producto no canjeado", 
-                            "Producto dado de baja"
+                            "Producto no canjeado"
                         ])
                         obs = st.text_area("Resolución / Comentarios finales")
                         if st.form_submit_button("Finalizar y Archivar"):
@@ -656,9 +655,12 @@ def render_ui(user_info: dict):
                             conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
                             
         with tab_p5_sin_canje:
-            df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE (estado_canje = 'No aplica' OR estado_canje LIKE '%compra propia%') AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            # Solo productos SIN canje ("No aplica" o compras propias)
+            df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'", conn)
             
-            if not df_p5_sc.empty:
+            if df_p5_sc.empty:
+                st.info("No hay productos sin canje pendientes de cierre.")
+            else:
                 df_p5_sc["Nivel Alerta"] = df_p5_sc.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
                 st.markdown("#### 🔍 Filtros de Búsqueda")
@@ -674,25 +676,32 @@ def render_ui(user_info: dict):
                 if df_filtrado_sc.empty:
                     st.warning("No hay productos sin canje que coincidan con los filtros.")
                 else:
-                    cols_mostrar_sc = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Canje"]
+                    cols_mostrar_sc = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Canje", "Bulto"]
                     st.dataframe(df_filtrado_sc[cols_mostrar_sc], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id_sc = df_filtrado_sc['ID'].tolist()
                     formato_opciones_sc = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_sc.iterrows()}
                     
-                    st.markdown("#### ⚙️ Opciones de Difusión a la Red")
-                    id_sc = st.selectbox("Seleccione el producto para gestionar:", opciones_id_sc, format_func=lambda x: formato_opciones_sc[x], key="sel_p5_sc")
+                    st.markdown("#### ⚙️ Cierre Definitivo (Sin Canje)")
+                    id_sc = st.selectbox("Seleccione el producto para CERRAR:", opciones_id_sc, format_func=lambda x: formato_opciones_sc[x], key="sel_p5_sc")
                     
                     prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
                     if prod_sc:
                         with st.form("form_paso5_sin_canje"):
+                            st.caption("Opciones de Gestión de Red (Opcional)")
                             c1, c2 = st.columns(2)
                             with c1: difusion_sel = st.selectbox("DIFUSIÓN A LA RED", OPCIONES_DIFUSION_RED)
                             with c2: redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK", OPCIONES_REDISTRIBUCION_STOCK)
-                            obs_sc = st.text_area("Observaciones Adicionales", value=prod_sc['observacion_paso5'] or "")
-                            if st.form_submit_button("Guardar Gestión"):
-                                conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=? WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, id_sc))
-                                conn.commit(); st.success("Guardado."); time.sleep(1); st.rerun()
+                            
+                            st.divider()
+                            st.caption("Resolución Final")
+                            num_res_sc = st.text_input("N° Resolución o Documento de Baja *")
+                            estado_fin_sc = st.selectbox("Estado Final *", ["Producto dado de baja", "Producto donado"])
+                            obs_sc = st.text_area("Resolución / Comentarios finales", value=prod_sc['observacion_paso5'] or "")
+                            
+                            if st.form_submit_button("Finalizar y Archivar"):
+                                conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=?, resolucion_numero=?, estado_final=?, estado_global='Concluido' WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, num_res_sc, estado_fin_sc, id_sc))
+                                conn.commit(); st.success("Archivado con éxito."); time.sleep(1.5); st.rerun()
 
     # --- ALERTAS, CARGA MASIVA Y ADMIN ---
     elif tab_seleccionada == "🚨 Gestión Anexo II (Jefatura)":
