@@ -5,6 +5,7 @@ Gestión de Usuarios, Dashboard, Consolidado General, Interfaz Segura y Alertas 
 import io
 import os
 import time
+import base64
 import sqlite3
 import streamlit as st
 import pandas as pd
@@ -65,7 +66,7 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="stHeader"] {{ display: none !important; }}
         #MainMenu {{ visibility: hidden !important; }}
         footer {{ visibility: hidden !important; }}
-        .stDeployButton {{ display: none !important; }}
+        .stDeployButton, .stAppDeployButton, [data-testid="stToolbar"] {{ display: none !important; visibility: hidden !important; }}
         .block-container {{ padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }}
         .stApp {{ background-color: {tema['bg']} !important; color: {tema['text']} !important; }}
         [data-testid="stSidebar"] {{ background-color: {tema['card']} !important; border-right: 1px solid {tema['border']} !important; }}
@@ -163,7 +164,7 @@ def generar_anexo_ii_docx(datos):
 
 def actualizar_bd_alertas(conn):
     cursor = conn.cursor()
-    columnas = ["alerta_numero TEXT", "alerta_fecha TEXT", "titular_registro TEXT", "registro_sanitario TEXT", "principio_activo TEXT"]
+    columnas = ["alerta_numero TEXT", "alerta_fecha TEXT", "titular_registro TEXT", "registro_sanitario TEXT", "principio_activo TEXT", "archivo_canje TEXT", "nombre_archivo_canje TEXT"]
     for col in columnas:
         try: cursor.execute(f"ALTER TABLE productos ADD COLUMN {col}")
         except sqlite3.OperationalError: pass 
@@ -179,8 +180,6 @@ def render_ui(user_info: dict):
     idx_tema = opciones_temas.index(tema_actual)
     aplicar_estilo_tema(tema_actual)
 
-    # Configuración maestra para el ancho de las columnas de todas las tablas
-    # Esto evita el scroll horizontal y hace que la "Descripción" tenga más espacio
     cfg_columnas = {
         "ID": st.column_config.NumberColumn("ID", width="small"),
         "Nivel Alerta": st.column_config.TextColumn("Alerta", width="small"),
@@ -334,7 +333,6 @@ def render_ui(user_info: dict):
                 if df_filtrado.empty:
                     st.warning("No hay registros que coincidan con los filtros.")
                 else:
-                    # Reducimos las columnas visibles a 6 esenciales para evitar scroll horizontal
                     cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Lote"]
                     st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
@@ -402,9 +400,20 @@ def render_ui(user_info: dict):
                 with st.form("form_paso2"):
                     aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
                     obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
+                    # --- NUEVO: Carga de Archivo Adjunto en Paso 2 ---
+                    archivo_adjunto = st.file_uploader("📎 Adjuntar Carta de Canje o Respaldo (Opcional)", type=["pdf", "png", "jpg", "jpeg", "docx", "doc"])
+                    
                     if st.form_submit_button("Avanzar a Paso 3"):
-                        conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3 WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), prod_id))
-                        conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
+                        archivo_b64 = ""
+                        nombre_archivo = ""
+                        if archivo_adjunto is not None:
+                            archivo_b64 = base64.b64encode(archivo_adjunto.read()).decode()
+                            nombre_archivo = archivo_adjunto.name
+                            conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3, archivo_canje=?, nombre_archivo_canje=? WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), archivo_b64, nombre_archivo, prod_id))
+                        else:
+                            conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3 WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), prod_id))
+                        
+                        conn.commit(); st.success("Avanzado con éxito."); time.sleep(1.5); st.rerun()
 
     # --- PASO 3 ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
@@ -432,7 +441,7 @@ def render_ui(user_info: dict):
                 if df_filtrado.empty:
                     st.warning("No hay productos pendientes que coincidan con los filtros.")
                 else:
-                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Cant", "Lote"]
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Cant", "Lote", "Canje"]
                     st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id = df_filtrado['ID'].tolist()
@@ -443,6 +452,12 @@ def render_ui(user_info: dict):
                     
                     obs_previa = df_filtrado.loc[df_filtrado['ID'] == prod_id, 'Obs_P2'].values[0]
                     if obs_previa: st.info(f"📝 **Instrucciones de Jefatura:** {obs_previa}")
+                    
+                    # --- NUEVO: Descarga de Archivo Adjunto en Paso 3 ---
+                    prod_data_file = conn.cursor().execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=?", (prod_id,)).fetchone()
+                    if prod_data_file and prod_data_file['archivo_canje']:
+                        st.info("📎 Jefatura ha adjuntado un documento de respaldo para este canje:")
+                        st.download_button("Descargar Respaldo de Jefatura", base64.b64decode(prod_data_file['archivo_canje']), file_name=prod_data_file['nombre_archivo_canje'])
                     
                     with st.form("form_paso3_ingreso"):
                         proveedor, tipo_doc = st.selectbox("Proveedor *", PROVEEDORES_OFICIALES), st.selectbox("Tipo Doc *", TIPOS_DOCUMENTO)
@@ -473,7 +488,7 @@ def render_ui(user_info: dict):
                 if df_filtrado_seg.empty:
                     st.warning("No hay trámites que coincidan con los filtros.")
                 else:
-                    cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Proveedor", "Trámite"]
+                    cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Proveedor", "Trámite", "Doc"]
                     st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id_seg = df_filtrado_seg['ID'].tolist()
@@ -482,6 +497,11 @@ def render_ui(user_info: dict):
                     st.markdown("#### ⚙️ Actualización de Estado")
                     id_seg = st.selectbox("Seleccione el trámite a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3_s")
                     
+                    prod_seg_file = conn.cursor().execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=?", (id_seg,)).fetchone()
+                    if prod_seg_file and prod_seg_file['archivo_canje']:
+                        st.info("📎 Jefatura ha adjuntado un documento de respaldo para este canje:")
+                        st.download_button("Descargar Respaldo de Jefatura", base64.b64decode(prod_seg_file['archivo_canje']), file_name=prod_seg_file['nombre_archivo_canje'], key="dl_seg_p3")
+
                     prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
                     if prod_seg:
                         with st.form("form_paso3_actualizar"):
@@ -606,7 +626,7 @@ def render_ui(user_info: dict):
                 if df_filtrado.empty:
                     st.warning("No hay productos que coincidan con los filtros.")
                 else:
-                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Bulto"]
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Proveedor", "Bulto"]
                     st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id = df_filtrado['ID'].tolist()
@@ -621,8 +641,7 @@ def render_ui(user_info: dict):
                             "Canjeado - reposición del producto", 
                             "Canjeado - nota de credito recibida", 
                             "Producto no canjeado", 
-                            "Producto dado de baja",
-                            "Retirado por Alerta Sanitaria"
+                            "Producto dado de baja"
                         ])
                         obs = st.text_area("Resolución / Comentarios finales")
                         if st.form_submit_button("Finalizar y Archivar"):
@@ -734,7 +753,28 @@ def render_ui(user_info: dict):
             amarillas = len(df_all[df_all["Nivel Alerta"] == "🟡 Amarilla (61-120d)"])
             verdes = len(df_all[df_all["Nivel Alerta"] == "🟢 Verde (> 120d)"])
             
+            # --- NUEVO: Exportar Consolidado a Excel ---
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_all.to_excel(writer, index=False, sheet_name='Consolidado')
+            
+            st.download_button(
+                label="📥 Descargar Reporte Completo en Excel",
+                data=output.getvalue(),
+                file_name=f"Reporte_Vencimientos_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            st.markdown("<br>", unsafe_allow_html=True)
+            
             st.markdown("#### 🚦 Semáforo de Riesgo (Vencimientos)")
+            
+            # --- NUEVO: Gráfico Visual de Procesos ---
+            chart_data = pd.DataFrame({
+                "Nivel de Riesgo": ["1. Crítico (Roja)", "2. Tramitación (Amarilla)", "3. Seguro (Verde)"],
+                "Cantidad": [rojas, amarillas, verdes]
+            }).set_index("Nivel de Riesgo")
+            st.bar_chart(chart_data)
+            
             sem1, sem2, sem3 = st.columns(3)
             sem1.metric("🔴 Alerta Roja (Crítico)", rojas)
             sem2.metric("🟡 Alerta Amarilla (Tramitación)", amarillas)
