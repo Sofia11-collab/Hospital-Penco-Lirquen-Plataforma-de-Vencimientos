@@ -325,62 +325,36 @@ def render_ui(user_info: dict):
         if df.empty: 
             st.info("No hay productos pendientes de canje comercial.")
         else:
-            hoy = datetime.now().date()
-            df["Meses Vencer"] = df["Vencimiento"].apply(lambda v: max(0.0, round((datetime.strptime(str(v), "%Y-%m-%d").date() - hoy).days / 30.44, 1)) if pd.notnull(v) else 0.0)
             df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
-            columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote", "Vencimiento"]
-            df = df[columnas_orden]
             
-            # --- NUEVO: Filtros Estilo Retail ---
             st.markdown("### 🔍 Filtros de Búsqueda")
             col_f1, col_f2 = st.columns(2)
+            filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p2")
+            filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p2")
             
-            # El multiselect genera exactamente esas etiquetas visuales con la "X"
-            filtro_semaforo = col_f1.multiselect(
-                "Filtrar por Semáforo de Riesgo", 
-                ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"],
-                placeholder="Seleccione los colores..."
-            )
-            filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...")
-            
-            # Aplicamos los filtros a los datos
             df_filtrado = df.copy()
-            if filtro_semaforo:
-                df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
-            if filtro_codigo:
-                df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+            if filtro_semaforo: df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
+            if filtro_codigo: df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
             
             st.markdown("<br>", unsafe_allow_html=True)
-            st.dataframe(df_filtrado, hide_index=True, use_container_width=True, height=180)
-            
-            if not df_filtrado.empty:
-                # --- NUEVO: Selección de producto más amigable ---
-                opciones_id = df_filtrado['ID'].tolist()
+            if df_filtrado.empty:
+                st.warning("No hay productos pendientes que coincidan con los filtros.")
+            else:
+                cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote"]
+                st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
                 
-                # Creamos un diccionario para que la caja desplegable no muestre un simple número
-                # sino: "543 - SUERO ANTI A (Lote: 56651fg)"
-                formato_opciones = {
-                    row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" 
-                    for idx, row in df_filtrado.iterrows()
-                }
+                opciones_id = df_filtrado['ID'].tolist()
+                formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
                 
                 st.markdown("### ⚙️ Gestión del Producto")
-                prod_id = st.selectbox(
-                    "Seleccione el producto filtrado que desea gestionar:", 
-                    opciones_id, 
-                    format_func=lambda x: formato_opciones[x]
-                )
+                prod_id = st.selectbox("Seleccione el producto filtrado que desea gestionar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p2")
                 
                 with st.form("form_paso2"):
                     aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
                     obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
-                    
                     if st.form_submit_button("Avanzar a Paso 3"):
                         conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3 WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), prod_id))
-                        conn.commit()
-                        st.success("Producto avanzado al Paso 3."); time.sleep(1.5); st.rerun()
-            else:
-                st.warning("No hay productos pendientes que coincidan con los filtros seleccionados.")
+                        conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
 
     # --- PASO 3 ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
@@ -388,44 +362,86 @@ def render_ui(user_info: dict):
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso", "🔄 Seguimiento de Trámites"])
         
         with tab_p3_nuevo:
-            df_p3_nuevo = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, estado_canje AS Canje, observacion_paso2 AS Obs_P2 FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'", conn)
+            df_p3_nuevo = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo, estado_canje AS Canje, observacion_paso2 AS Obs_P2 FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'", conn)
             
-            filtro_cod = st.text_input("🔍 Filtrar lista por Código Reyimen (Opcional)")
-            if filtro_cod:
-                df_p3_nuevo = df_p3_nuevo[df_p3_nuevo['Código'].astype(str).str.contains(filtro_cod, case=False, na=False)]
-            
-            if df_p3_nuevo.empty: st.info("No hay nuevos productos.")
+            if df_p3_nuevo.empty: 
+                st.info("No hay nuevos productos.")
             else:
-                st.dataframe(df_p3_nuevo.drop(columns=['Obs_P2']), hide_index=True, use_container_width=True, height=180)
-                prod_id = st.selectbox("Seleccione ID a ingresar trámite", df_p3_nuevo['ID'].tolist())
+                df_p3_nuevo["Nivel Alerta"] = df_p3_nuevo.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                obs_previa = df_p3_nuevo.loc[df_p3_nuevo['ID'] == prod_id, 'Obs_P2'].values[0]
-                if obs_previa:
-                    st.info(f"📝 **Instrucciones/Observaciones de Jefatura:** {obs_previa}")
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p3_n")
+                filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p3_n")
                 
-                with st.form("form_paso3_ingreso"):
-                    proveedor, tipo_doc = st.selectbox("Proveedor *", PROVEEDORES_OFICIALES), st.selectbox("Tipo Doc *", TIPOS_DOCUMENTO)
-                    num_doc, tramite = st.text_input("N° Documento / OC *"), st.selectbox("Estado del trámite *", ESTADOS_TRAMITE_PROVEEDOR)
-                    obs = st.text_area("Observaciones del Área de Registro")
-                    if st.form_submit_button("Avanzar a Paso 4"):
-                        conn.cursor().execute("UPDATE productos SET proveedor=?, tipo_documento=?, numero_documento_oc=?, tramite_proveedor=?, fecha_paso3=?, observacion_paso3=?, paso_actual=4 WHERE id=?", (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
-                        conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
+                df_filtrado = df_p3_nuevo.copy()
+                if filtro_semaforo: df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
+                if filtro_codigo: df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado.empty:
+                    st.warning("No hay productos pendientes que coincidan con los filtros.")
+                else:
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Cant", "Lote", "Canje"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id = df_filtrado['ID'].tolist()
+                    formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
+                    
+                    st.markdown("### ⚙️ Gestión del Trámite")
+                    prod_id = st.selectbox("Seleccione el producto filtrado para ingresar trámite:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p3_n")
+                    
+                    obs_previa = df_filtrado.loc[df_filtrado['ID'] == prod_id, 'Obs_P2'].values[0]
+                    if obs_previa: st.info(f"📝 **Instrucciones de Jefatura:** {obs_previa}")
+                    
+                    with st.form("form_paso3_ingreso"):
+                        proveedor, tipo_doc = st.selectbox("Proveedor *", PROVEEDORES_OFICIALES), st.selectbox("Tipo Doc *", TIPOS_DOCUMENTO)
+                        num_doc, tramite = st.text_input("N° Documento / OC *"), st.selectbox("Estado del trámite *", ESTADOS_TRAMITE_PROVEEDOR)
+                        obs = st.text_area("Observaciones del Área de Registro")
+                        if st.form_submit_button("Avanzar a Paso 4"):
+                            conn.cursor().execute("UPDATE productos SET proveedor=?, tipo_documento=?, numero_documento_oc=?, tramite_proveedor=?, fecha_paso3=?, observacion_paso3=?, paso_actual=4 WHERE id=?", (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
+                            conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
 
         with tab_p3_seguimiento:
-            df_p3_seg = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, proveedor AS Proveedor, tramite_proveedor AS Trámite, numero_documento_oc AS Doc FROM productos WHERE paso_actual >= 3 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
-            if not df_p3_seg.empty:
-                st.dataframe(df_p3_seg, hide_index=True, use_container_width=True, height=180)
-                id_seg = st.selectbox("Seleccione ID a actualizar", df_p3_seg['ID'].tolist())
-                prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
-                if prod_seg:
-                    with st.form("form_paso3_actualizar"):
-                        u_prov = st.selectbox("Proveedor", PROVEEDORES_OFICIALES, index=PROVEEDORES_OFICIALES.index(prod_seg['proveedor']) if prod_seg['proveedor'] in PROVEEDORES_OFICIALES else 0)
-                        u_doc = st.text_input("N° Doc", value=prod_seg['numero_documento_oc'] or "")
-                        u_tram = st.selectbox("Estado", ESTADOS_TRAMITE_PROVEEDOR, index=ESTADOS_TRAMITE_PROVEEDOR.index(prod_seg['tramite_proveedor']) if prod_seg['tramite_proveedor'] in ESTADOS_TRAMITE_PROVEEDOR else 0)
-                        u_obs = st.text_area("Obs.", value=prod_seg['observacion_paso3'] or "")
-                        if st.form_submit_button("Guardar"):
-                            conn.cursor().execute("UPDATE productos SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=? WHERE id=?", (u_prov, u_doc, u_tram, u_obs, id_seg))
-                            conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
+            df_p3_seg = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo, proveedor AS Proveedor, tramite_proveedor AS Trámite, numero_documento_oc AS Doc FROM productos WHERE paso_actual >= 3 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            
+            if df_p3_seg.empty: 
+                st.info("No hay trámites en seguimiento.")
+            else:
+                df_p3_seg["Nivel Alerta"] = df_p3_seg.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+                
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo_seg = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p3_s")
+                filtro_codigo_seg = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p3_s")
+                
+                df_filtrado_seg = df_p3_seg.copy()
+                if filtro_semaforo_seg: df_filtrado_seg = df_filtrado_seg[df_filtrado_seg["Nivel Alerta"].isin(filtro_semaforo_seg)]
+                if filtro_codigo_seg: df_filtrado_seg = df_filtrado_seg[df_filtrado_seg["Código"].astype(str).str.contains(filtro_codigo_seg, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado_seg.empty:
+                    st.warning("No hay trámites que coincidan con los filtros.")
+                else:
+                    cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Proveedor", "Trámite", "Doc"]
+                    st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id_seg = df_filtrado_seg['ID'].tolist()
+                    formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
+                    
+                    st.markdown("### ⚙️ Actualización del Trámite")
+                    id_seg = st.selectbox("Seleccione el producto filtrado para actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3_s")
+                    
+                    prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
+                    if prod_seg:
+                        with st.form("form_paso3_actualizar"):
+                            u_prov = st.selectbox("Proveedor", PROVEEDORES_OFICIALES, index=PROVEEDORES_OFICIALES.index(prod_seg['proveedor']) if prod_seg['proveedor'] in PROVEEDORES_OFICIALES else 0)
+                            u_doc = st.text_input("N° Doc", value=prod_seg['numero_documento_oc'] or "")
+                            u_tram = st.selectbox("Estado", ESTADOS_TRAMITE_PROVEEDOR, index=ESTADOS_TRAMITE_PROVEEDOR.index(prod_seg['tramite_proveedor']) if prod_seg['tramite_proveedor'] in ESTADOS_TRAMITE_PROVEEDOR else 0)
+                            u_obs = st.text_area("Obs.", value=prod_seg['observacion_paso3'] or "")
+                            if st.form_submit_button("Guardar"):
+                                conn.cursor().execute("UPDATE productos SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=? WHERE id=?", (u_prov, u_doc, u_tram, u_obs, id_seg))
+                                conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
 
     # --- PASO 4 ---
     elif tab_seleccionada == "📦 4. Bulto/Ubicación":
@@ -433,71 +449,168 @@ def render_ui(user_info: dict):
         tab_p4_nuevo, tab_p4_seg = st.tabs(["➕ Asignar Nueva Ubicación", "🔄 Seguimiento de Bultos"])
         
         with tab_p4_nuevo:
-            df = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
-            if df.empty: st.info("No hay productos pendientes de asignación de bulto.")
+            df = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            
+            if df.empty: 
+                st.info("No hay productos pendientes de asignación de bulto.")
             else:
-                st.dataframe(df, hide_index=True, use_container_width=True, height=180)
-                prod_id = st.selectbox("ID de Producto", df['ID'].tolist())
-                with st.form("form_p4"):
-                    ub_fisica, ub_comp = st.selectbox("Ubicación Física *", OPCIONES_FISICA_P4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
-                    bulto, obs = st.text_input("N° Bulto *"), st.text_area("Observaciones Paso 4")
-                    if st.form_submit_button("Avanzar a Paso 5"):
-                        conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=?, paso_actual=5 WHERE id=?", (ub_fisica, ub_comp, bulto, obs, prod_id))
-                        conn.commit(); st.success("Avanzado a Paso 5."); time.sleep(1); st.rerun()
+                df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+                
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p4_n")
+                filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p4_n")
+                
+                df_filtrado = df.copy()
+                if filtro_semaforo: df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
+                if filtro_codigo: df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado.empty:
+                    st.warning("No hay productos que coincidan con los filtros.")
+                else:
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Proveedor"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id = df_filtrado['ID'].tolist()
+                    formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
+                    
+                    st.markdown("### ⚙️ Gestión de Bulto")
+                    prod_id = st.selectbox("Seleccione el producto filtrado:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p4_n")
+                    
+                    with st.form("form_p4"):
+                        ub_fisica, ub_comp = st.selectbox("Ubicación Física *", OPCIONES_FISICA_P4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
+                        bulto, obs = st.text_input("N° Bulto *"), st.text_area("Observaciones Paso 4")
+                        if st.form_submit_button("Avanzar a Paso 5"):
+                            conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=?, paso_actual=5 WHERE id=?", (ub_fisica, ub_comp, bulto, obs, prod_id))
+                            conn.commit(); st.success("Avanzado a Paso 5."); time.sleep(1); st.rerun()
                         
         with tab_p4_seg:
-            df_seg4 = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, ubicacion_fisica AS Física, numero_bulto AS Bulto FROM productos WHERE paso_actual >= 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
-            if df_seg4.empty: st.info("No hay bultos activos en seguimiento.")
+            df_seg4 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, ubicacion_fisica AS Física, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual >= 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            
+            if df_seg4.empty: 
+                st.info("No hay bultos activos en seguimiento.")
             else:
-                st.dataframe(df_seg4, hide_index=True, use_container_width=True, height=180)
-                id_seg4 = st.selectbox("ID de Producto a actualizar", df_seg4['ID'].tolist())
-                prod_seg4 = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg4,)).fetchone()
-                if prod_seg4:
-                    with st.form("form_p4_actualizar"):
-                        idx_fis = OPCIONES_FISICA_P4.index(prod_seg4['ubicacion_fisica']) if prod_seg4['ubicacion_fisica'] in OPCIONES_FISICA_P4 else 0
-                        idx_comp = BODEGAS_PASO4.index(prod_seg4['ubicacion_computacional']) if prod_seg4['ubicacion_computacional'] in BODEGAS_PASO4 else 0
-                        
-                        u_fisica = st.selectbox("Ubicación Física", OPCIONES_FISICA_P4, index=idx_fis)
-                        u_comp = st.selectbox("Ubicación Computacional", BODEGAS_PASO4, index=idx_comp)
-                        u_bulto = st.text_input("N° Bulto", value=prod_seg4['numero_bulto'] or "")
-                        u_obs4 = st.text_area("Observaciones", value=prod_seg4['observacion_paso4'] or "")
-                        
-                        if st.form_submit_button("Actualizar Ubicación/Bulto"):
-                            conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
-                            conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
+                df_seg4["Nivel Alerta"] = df_seg4.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+                
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo_seg = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p4_s")
+                filtro_codigo_seg = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p4_s")
+                
+                df_filtrado_seg = df_seg4.copy()
+                if filtro_semaforo_seg: df_filtrado_seg = df_filtrado_seg[df_filtrado_seg["Nivel Alerta"].isin(filtro_semaforo_seg)]
+                if filtro_codigo_seg: df_filtrado_seg = df_filtrado_seg[df_filtrado_seg["Código"].astype(str).str.contains(filtro_codigo_seg, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado_seg.empty:
+                    st.warning("No hay bultos que coincidan con los filtros.")
+                else:
+                    cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Física", "Bulto"]
+                    st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id_seg = df_filtrado_seg['ID'].tolist()
+                    formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
+                    
+                    st.markdown("### ⚙️ Actualización de Ubicación")
+                    id_seg4 = st.selectbox("Seleccione el producto filtrado para actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p4_s")
+                    
+                    prod_seg4 = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg4,)).fetchone()
+                    if prod_seg4:
+                        with st.form("form_p4_actualizar"):
+                            idx_fis = OPCIONES_FISICA_P4.index(prod_seg4['ubicacion_fisica']) if prod_seg4['ubicacion_fisica'] in OPCIONES_FISICA_P4 else 0
+                            idx_comp = BODEGAS_PASO4.index(prod_seg4['ubicacion_computacional']) if prod_seg4['ubicacion_computacional'] in BODEGAS_PASO4 else 0
+                            
+                            u_fisica = st.selectbox("Ubicación Física", OPCIONES_FISICA_P4, index=idx_fis)
+                            u_comp = st.selectbox("Ubicación Computacional", BODEGAS_PASO4, index=idx_comp)
+                            u_bulto = st.text_input("N° Bulto", value=prod_seg4['numero_bulto'] or "")
+                            u_obs4 = st.text_area("Observaciones", value=prod_seg4['observacion_paso4'] or "")
+                            
+                            if st.form_submit_button("Actualizar Ubicación/Bulto"):
+                                conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
+                                conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
 
     # --- PASO 5 ---
     elif tab_seleccionada == "📜 5. Resolución/Cierre":
         st.header("📜 Paso 5 — Resolución y Cierre")
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre General", "🟢 Sin Carta de Canje"])
+        
         with tab_p5_cierre:
-            df_p5 = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido'", conn)
-            if df_p5.empty: st.info("No hay productos pendientes.")
+            df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido'", conn)
+            
+            if df_p5.empty: 
+                st.info("No hay productos pendientes.")
             else:
-                st.dataframe(df_p5, hide_index=True, use_container_width=True, height=180)
-                prod_id = st.selectbox("ID a CERRAR", df_p5['ID'].tolist())
-                with st.form("form_p5"):
-                    num_res = st.text_input("N° Resolución o Documento *")
-                    estado_fin = st.selectbox("Estado Final *", ["Retirado por Alerta Sanitaria", "Destruido", "Concluido", "Dado de baja", "Canjeado"])
-                    obs = st.text_area("Resolución")
-                    if st.form_submit_button("Finalizar y Archivar"):
-                        conn.cursor().execute("UPDATE productos SET resolucion_numero=?, estado_final=?, observacion_paso5=?, estado_global='Concluido' WHERE id=?", (num_res, estado_fin, obs, prod_id))
-                        conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
+                df_p5["Nivel Alerta"] = df_p5.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+                
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p5_c")
+                filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p5_c")
+                
+                df_filtrado = df_p5.copy()
+                if filtro_semaforo: df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
+                if filtro_codigo: df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado.empty:
+                    st.warning("No hay productos que coincidan con los filtros.")
+                else:
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Proveedor", "Bulto"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id = df_filtrado['ID'].tolist()
+                    formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
+                    
+                    st.markdown("### ⚙️ Cierre de Trámite")
+                    prod_id = st.selectbox("Seleccione el producto filtrado para CERRAR:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p5_c")
+                    
+                    with st.form("form_p5"):
+                        num_res = st.text_input("N° Resolución o Documento *")
+                        estado_fin = st.selectbox("Estado Final *", ["Retirado por Alerta Sanitaria", "Destruido", "Concluido", "Dado de baja", "Canjeado"])
+                        obs = st.text_area("Resolución")
+                        if st.form_submit_button("Finalizar y Archivar"):
+                            conn.cursor().execute("UPDATE productos SET resolucion_numero=?, estado_final=?, observacion_paso5=?, estado_global='Concluido' WHERE id=?", (num_res, estado_fin, obs, prod_id))
+                            conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
+                            
         with tab_p5_sin_canje:
-            df_p5_sc = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje FROM productos WHERE (estado_canje = 'No aplica' OR estado_canje LIKE '%compra propia%') AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE (estado_canje = 'No aplica' OR estado_canje LIKE '%compra propia%') AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            
             if not df_p5_sc.empty:
-                st.dataframe(df_p5_sc, hide_index=True, use_container_width=True, height=180)
-                id_sc = st.selectbox("Seleccione ID para Difusión", df_p5_sc['ID'].tolist())
-                prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
-                if prod_sc:
-                    with st.form("form_paso5_sin_canje"):
-                        c1, c2 = st.columns(2)
-                        with c1: difusion_sel = st.selectbox("DIFUSIÓN A LA RED", OPCIONES_DIFUSION_RED)
-                        with c2: redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK", OPCIONES_REDISTRIBUCION_STOCK)
-                        obs_sc = st.text_area("Observaciones", value=prod_sc['observacion_paso5'] or "")
-                        if st.form_submit_button("Guardar Gestión"):
-                            conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=? WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, id_sc))
-                            conn.commit(); st.success("Guardado."); time.sleep(1); st.rerun()
+                df_p5_sc["Nivel Alerta"] = df_p5_sc.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+                
+                st.markdown("### 🔍 Filtros de Búsqueda")
+                col_f1, col_f2 = st.columns(2)
+                filtro_semaforo_sc = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p5_sc")
+                filtro_codigo_sc = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p5_sc")
+                
+                df_filtrado_sc = df_p5_sc.copy()
+                if filtro_semaforo_sc: df_filtrado_sc = df_filtrado_sc[df_filtrado_sc["Nivel Alerta"].isin(filtro_semaforo_sc)]
+                if filtro_codigo_sc: df_filtrado_sc = df_filtrado_sc[df_filtrado_sc["Código"].astype(str).str.contains(filtro_codigo_sc, case=False, na=False)]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if df_filtrado_sc.empty:
+                    st.warning("No hay productos sin canje que coincidan con los filtros.")
+                else:
+                    cols_mostrar_sc = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Canje"]
+                    st.dataframe(df_filtrado_sc[cols_mostrar_sc], hide_index=True, use_container_width=True, height=180)
+                    
+                    opciones_id_sc = df_filtrado_sc['ID'].tolist()
+                    formato_opciones_sc = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_sc.iterrows()}
+                    
+                    st.markdown("### ⚙️ Gestión a la Red")
+                    id_sc = st.selectbox("Seleccione el producto para Difusión:", opciones_id_sc, format_func=lambda x: formato_opciones_sc[x], key="sel_p5_sc")
+                    
+                    prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
+                    if prod_sc:
+                        with st.form("form_paso5_sin_canje"):
+                            c1, c2 = st.columns(2)
+                            with c1: difusion_sel = st.selectbox("DIFUSIÓN A LA RED", OPCIONES_DIFUSION_RED)
+                            with c2: redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK", OPCIONES_REDISTRIBUCION_STOCK)
+                            obs_sc = st.text_area("Observaciones", value=prod_sc['observacion_paso5'] or "")
+                            if st.form_submit_button("Guardar Gestión"):
+                                conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=? WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, id_sc))
+                                conn.commit(); st.success("Guardado."); time.sleep(1); st.rerun()
 
     # --- ALERTAS, CARGA MASIVA Y ADMIN ---
     elif tab_seleccionada == "🚨 Gestión Anexo II (Jefatura)":
