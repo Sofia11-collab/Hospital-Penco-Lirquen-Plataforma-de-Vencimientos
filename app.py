@@ -8,7 +8,7 @@ from src.ui import render_ui
 st.set_page_config(page_title="Gestión Vencimientos", page_icon="💊", layout="wide")
 
 def get_base64_image(image_path):
-    """Convierte la imagen a base64 para poder aplicarle CSS (transparencia)"""
+    """Convierte la imagen a base64 para poder aplicarle CSS"""
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
             return base64.b64encode(img_file.read()).decode()
@@ -42,7 +42,15 @@ def main():
         # DISEÑO DE LA PANTALLA DE INICIO DE SESIÓN
         # =======================================================
         
-        # 1. Logo con transparencia (Marca de agua)
+        # Reducir el enorme espacio en blanco superior por defecto de Streamlit
+        st.markdown("""
+            <style>
+                .block-container { padding-top: 3rem !important; padding-bottom: 1rem !important; }
+                header { visibility: hidden !important; }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        # 1. Logo circular (El truco border-radius: 50% corta las esquinas blancas)
         logo_base64 = get_base64_image("assets/hospital-penco-lirquen.png")
         if not logo_base64:
             logo_base64 = get_base64_image("assets/logo.png")
@@ -50,31 +58,27 @@ def main():
         if logo_base64:
             st.markdown(
                 f"""
-                <div style="display: flex; justify-content: center; margin-top: 3rem; margin-bottom: 10px;">
-                    <img src="data:image/png;base64,{logo_base64}" style="width: 140px; opacity: 0.4;">
+                <div style="display: flex; justify-content: center; margin-bottom: 10px;">
+                    <img src="data:image/png;base64,{logo_base64}" style="width: 120px; border-radius: 50%; opacity: 0.9;">
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-        else:
-            st.markdown("<br><br><br>", unsafe_allow_html=True)
             
-        # 2. Título Centrado y en Mayúsculas
-        st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; font-weight: 800;'>GESTIÓN Y LOGÍSTICA DE VENCIMIENTOS</h1>", unsafe_allow_html=True)
+        # 2. Título Centrado y en Mayúsculas (con márgenes reducidos)
+        st.markdown("<h1 style='text-align: center; margin-bottom: 0.2rem; font-weight: 800; font-size: 2.2rem;'>GESTIÓN Y LOGÍSTICA DE VENCIMIENTOS</h1>", unsafe_allow_html=True)
         
         # 3. Formulario centrado y más estrecho
-        # Usamos proporciones [1, 1.2, 1] para que los lados empujen el centro
         col_vacia1, col_centro, col_vacia2 = st.columns([1, 1.2, 1])
         
         with col_centro:
-            st.markdown("<h4 style='text-align: center; color: #666; margin-bottom: 1.5rem;'>Hospital Penco Lirquén — Iniciar Sesión</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #888; margin-bottom: 1rem; font-size: 1.1rem;'>Hospital Penco Lirquén — Iniciar Sesión</h4>", unsafe_allow_html=True)
             
             with st.form("login_form"):
-                # Campos apilados verticalmente
                 usuario = st.text_input("Usuario")
                 password = st.text_input("Contraseña", type="password")
                 
-                st.markdown("<br>", unsafe_allow_html=True) # Pequeño espacio antes del botón
+                # El botón ahora está inmediatamente debajo de la contraseña
                 submit_button = st.form_submit_button("Ingresar", use_container_width=True)
                 
                 if submit_button:
