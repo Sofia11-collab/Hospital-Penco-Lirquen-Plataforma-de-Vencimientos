@@ -292,7 +292,8 @@ def render_ui(user_info: dict):
 
         with tab_p1_editar:
             st.subheader("Registros Ingresados en Paso 1 (Modificables)")
-            df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual = 1 OR estado_global = 'CUARENTENA'", conn)
+            # SOLUCIÓN DEL ERROR: Ahora busca en el paso 1, paso 2 o cuarentena.
+            df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'", conn)
             if df_p1.empty: st.info("No hay registros.")
             else:
                 st.dataframe(df_p1, hide_index=True, use_container_width=True, height=180)
@@ -323,7 +324,8 @@ def render_ui(user_info: dict):
         df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
         if df.empty: st.info("No hay productos pendientes de canje comercial.")
         else:
-            # APLICACIÓN DE SEMÁFORO EN PASO 2
+            hoy = datetime.now().date()
+            df["Meses Vencer"] = df["Vencimiento"].apply(lambda v: max(0.0, round((datetime.strptime(str(v), "%Y-%m-%d").date() - hoy).days / 30.44, 1)) if pd.notnull(v) else 0.0)
             df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
             columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote", "Vencimiento"]
             df = df[columnas_orden]
@@ -504,9 +506,7 @@ def render_ui(user_info: dict):
         st.header("🔍 Consolidado")
         df_cons = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, motivo_informe AS Motivo, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn)
         
-        # APLICACIÓN SEMÁFORO EN CONSOLIDADO
         df_cons["Nivel Alerta"] = df_cons.apply(lambda row: calcular_semaforo_vencimiento(row["Venc"], row["Motivo"]), axis=1)
-        # Reordenamos para que el semáforo quede al principio
         cols_cons = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Cant", "Lote", "Venc", "Estado", "Proveedor"]
         df_cons = df_cons[cols_cons]
         st.dataframe(df_cons, hide_index=True)
@@ -517,7 +517,6 @@ def render_ui(user_info: dict):
         if not df_all.empty:
             df_all["Nivel Alerta"] = df_all.apply(lambda row: calcular_semaforo_vencimiento(row["vencimiento"], row["motivo_informe"]), axis=1)
             
-            # Contadores de Semáforo
             rojas = len(df_all[df_all["Nivel Alerta"] == "🔴 Roja (≤ 60d)"])
             amarillas = len(df_all[df_all["Nivel Alerta"] == "🟡 Amarilla (61-120d)"])
             verdes = len(df_all[df_all["Nivel Alerta"] == "🟢 Verde (> 120d)"])
