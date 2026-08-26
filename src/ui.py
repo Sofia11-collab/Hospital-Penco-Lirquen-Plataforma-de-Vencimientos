@@ -69,6 +69,7 @@ def aplicar_estilo_tema(nombre_tema):
         .stDeployButton, .stAppDeployButton, [data-testid="stToolbar"] {{ display: none !important; visibility: hidden !important; }}
         .block-container {{ padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }}
         .stApp {{ background-color: {tema['bg']} !important; color: {tema['text']} !important; }}
+        [data-testid="stSidebar"] > div:first-child {{ padding-top: 1.5rem !important; }}
         [data-testid="stSidebar"] {{ background-color: {tema['card']} !important; border-right: 1px solid {tema['border']} !important; }}
         [data-testid="stSidebar"] *, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {{ color: {tema['text']} !important; font-weight: 600 !important; }}
         [data-testid="stSidebar"] div[role="radiogroup"] > label {{ padding: 10px 12px; background-color: transparent; border-radius: 8px; margin-bottom: 4px; transition: all 0.2s ease; }}
@@ -94,7 +95,7 @@ def aplicar_estilo_tema(nombre_tema):
         div[data-testid="stForm"] button:hover {{ background-color: #0369a1 !important; }}
         [data-testid="stFileUploader"] section {{ background-color: #ffffff !important; border: 2px dashed #cbd5e1 !important; }}
         [data-testid="stFileUploader"] section * {{ color: #334155 !important; }}
-        [data-testid="stSidebar"] [data-testid="stImage"] {{ display: flex !important; justify-content: center !important; margin-bottom: 20px !important; background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }}
+        [data-testid="stSidebar"] [data-testid="stImage"] {{ display: flex !important; justify-content: center !important; margin-top: -15px !important; margin-bottom: 20px !important; background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }}
         [data-testid="stSidebar"] [data-testid="stImage"] img {{ display: block !important; margin: 0 auto !important; image-rendering: high-quality !important; -webkit-font-smoothing: antialiased !important; mix-blend-mode: multiply !important; }}
     </style>
     """
@@ -208,8 +209,8 @@ def render_ui(user_info: dict):
     st.markdown(f"<hr style='margin-top: 0.5rem; margin-bottom: 1rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
 
     path1, path2 = "assets/hospital-penco-lirquen.png", "assets/logo.png"
-    if os.path.exists(path1): st.sidebar.image(path1, width=150)
-    elif os.path.exists(path2): st.sidebar.image(path2, width=150)
+    if os.path.exists(path1): st.sidebar.image(path1, width=120)
+    elif os.path.exists(path2): st.sidebar.image(path2, width=120)
 
     rol = user_info['rol']
     
@@ -612,7 +613,6 @@ def render_ui(user_info: dict):
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre con Carta de Canje", "🟢 Cierre sin Carta de Canje"])
         
         with tab_p5_cierre:
-            # Solo productos CON canje ("Aplica")
             df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5.empty: 
@@ -655,7 +655,6 @@ def render_ui(user_info: dict):
                             conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
                             
         with tab_p5_sin_canje:
-            # Solo productos SIN canje ("No aplica" o compras propias)
             df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5_sc.empty:
@@ -820,21 +819,29 @@ def render_ui(user_info: dict):
                     st.success("Usuario creado."); time.sleep(1); st.rerun()
             st.dataframe(pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn), hide_index=True, use_container_width=True, height=180)
         with tab_editar:
-            df_users_edit = pd.read_sql_query("SELECT * FROM usuarios", conn)
+            df_users_edit = pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn)
             if not df_users_edit.empty:
-                id_mod = st.selectbox("ID a Modificar", df_users_edit['id'].tolist())
+                st.markdown("#### 📋 Listado Actual de Usuarios")
+                st.dataframe(df_users_edit, hide_index=True, use_container_width=True)
+                
+                opciones_user_id = df_users_edit['id'].tolist()
+                formato_opciones_user = {row['id']: f"ID {row['id']} - {row['nombre_completo']} ({row['usuario']}) - Rol: {row['rol'].upper()}" for idx, row in df_users_edit.iterrows()}
+                
+                st.markdown("#### ⚙️ Editar o Eliminar Usuario")
+                id_mod = st.selectbox("Seleccione el usuario a Modificar/Eliminar:", opciones_user_id, format_func=lambda x: formato_opciones_user[x])
+                
                 user_data = conn.cursor().execute("SELECT * FROM usuarios WHERE id=?", (id_mod,)).fetchone()
                 if user_data:
                     with st.form("form_editar_usuario"):
                         new_u_nombre, new_u_user = st.text_input("Nombre", value=user_data['nombre_completo']), st.text_input("Usuario", value=user_data['usuario'])
-                        new_u_rol, new_u_estado = st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"]), st.selectbox("Estado", ["Activo", "Inactivo"])
+                        new_u_rol, new_u_estado = st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"], index=["admin", "jefatura", "registro", "bodega"].index(user_data['rol'])), st.selectbox("Estado", ["Activo", "Inactivo"], index=["Activo", "Inactivo"].index(user_data['estado']))
                         new_u_pass = st.text_input("Nueva Contraseña (Opcional)", type="password")
                         b1, b2 = st.columns(2)
-                        if b1.form_submit_button("Guardar"):
+                        if b1.form_submit_button("Guardar Cambios"):
                             if new_u_pass.strip(): conn.cursor().execute("UPDATE usuarios SET usuario=?, password=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_pass, new_u_rol, new_u_nombre, new_u_estado, id_mod))
                             else: conn.cursor().execute("UPDATE usuarios SET usuario=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
                             conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
-                        if b2.form_submit_button("Eliminar"):
+                        if b2.form_submit_button("Eliminar Usuario"):
                             conn.cursor().execute("DELETE FROM usuarios WHERE id=?", (id_mod,))
                             conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
