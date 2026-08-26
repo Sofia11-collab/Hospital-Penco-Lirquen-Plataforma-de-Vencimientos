@@ -225,8 +225,11 @@ def render_ui(user_info: dict):
     # --- PASO 1 ---
     if tab_seleccionada in ["📋 1. Informe Bodega", "📋 1. Ingresar Nueva Alerta"]:
         es_modulo_alerta = (tab_seleccionada == "📋 1. Ingresar Nueva Alerta")
-        if es_modulo_alerta: st.header("🚨 Ingreso Rápido de Alerta Sanitaria"); st.caption("Los productos pasarán a Cuarentena inmediatamente.")
-        else: st.header("📋 Paso 1 — Informe de Bodega")
+        if es_modulo_alerta: 
+            st.markdown("## 🚨 Ingreso Rápido de Alerta Sanitaria")
+            st.caption("Los productos pasarán a Cuarentena inmediatamente.")
+        else: 
+            st.markdown("## 📋 Paso 1 — Informe de Bodega")
             
         catalogo = get_catalogo()
         opciones = get_opciones_selectbox(catalogo)
@@ -291,16 +294,14 @@ def render_ui(user_info: dict):
                             st.success("✅ Producto registrado."); time.sleep(1.5); st.rerun()
 
         with tab_p1_editar:
-            st.subheader("Registros Ingresados en Paso 1 (Modificables)")
             df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'", conn)
             
             if df_p1.empty: 
                 st.info("No hay registros modificables.")
             else:
-                # Calculamos semáforo
                 df_p1["Nivel Alerta"] = df_p1.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
                 filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)", "🚨 ALERTA (ISP)"], placeholder="Seleccione colores...", key="sem_p1_e")
                 filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p1_e")
@@ -319,13 +320,12 @@ def render_ui(user_info: dict):
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
                     
-                    st.markdown("### ⚙️ Editar Registro")
-                    id_mod = st.selectbox("Seleccione el registro filtrado que desea modificar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p1_e")
+                    st.markdown("#### ⚙️ Edición de Registro Seleccionado")
+                    id_mod = st.selectbox("Seleccione el registro a modificar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p1_e")
                     
                     prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
                     if prod_data:
                         with st.form("form_editar_p1"):
-                            st.markdown(f"**Editando ID #{id_mod}**")
                             c_e1, c_e2 = st.columns(2)
                             idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
                             new_bodega = c_e1.selectbox("Bodega Origen *", BODEGAS_OFICIALES, index=idx_bodega)
@@ -344,7 +344,7 @@ def render_ui(user_info: dict):
 
     # --- PASO 2 ---
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
-        st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
+        st.markdown("## ⚖️ Paso 2 — Gestión de Canjes")
         df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
         
         if df.empty: 
@@ -356,7 +356,7 @@ def render_ui(user_info: dict):
             columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote", "Vencimiento"]
             df = df[columnas_orden]
             
-            st.markdown("### 🔍 Filtros de Búsqueda")
+            st.markdown("#### 🔍 Filtros de Búsqueda")
             col_f1, col_f2 = st.columns(2)
             filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p2")
             filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p2")
@@ -375,8 +375,8 @@ def render_ui(user_info: dict):
                 opciones_id = df_filtrado['ID'].tolist()
                 formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
                 
-                st.markdown("### ⚙️ Gestión del Producto")
-                prod_id = st.selectbox("Seleccione el producto filtrado que desea gestionar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p2")
+                st.markdown("#### ⚙️ Decisión de Canje")
+                prod_id = st.selectbox("Seleccione el producto para evaluar canje:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p2")
                 
                 with st.form("form_paso2"):
                     aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
@@ -387,7 +387,7 @@ def render_ui(user_info: dict):
 
     # --- PASO 3 ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
-        st.header("🚚 Paso 3 — Área de Registro / Proveedor")
+        st.markdown("## 🚚 Paso 3 — Registro y Proveedor")
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso", "🔄 Seguimiento de Trámites"])
         
         with tab_p3_nuevo:
@@ -398,7 +398,7 @@ def render_ui(user_info: dict):
             else:
                 df_p3_nuevo["Nivel Alerta"] = df_p3_nuevo.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
                 filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p3_n")
                 filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p3_n")
@@ -417,8 +417,8 @@ def render_ui(user_info: dict):
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
                     
-                    st.markdown("### ⚙️ Gestión del Trámite")
-                    prod_id = st.selectbox("Seleccione el producto filtrado para ingresar trámite:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p3_n")
+                    st.markdown("#### ⚙️ Ingreso de Trámite Comercial")
+                    prod_id = st.selectbox("Seleccione el producto para ingresar trámite:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p3_n")
                     
                     obs_previa = df_filtrado.loc[df_filtrado['ID'] == prod_id, 'Obs_P2'].values[0]
                     if obs_previa: st.info(f"📝 **Instrucciones de Jefatura:** {obs_previa}")
@@ -439,7 +439,7 @@ def render_ui(user_info: dict):
             else:
                 df_p3_seg["Nivel Alerta"] = df_p3_seg.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
                 filtro_semaforo_seg = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p3_s")
                 filtro_codigo_seg = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p3_s")
@@ -458,8 +458,8 @@ def render_ui(user_info: dict):
                     opciones_id_seg = df_filtrado_seg['ID'].tolist()
                     formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
                     
-                    st.markdown("### ⚙️ Actualización del Trámite")
-                    id_seg = st.selectbox("Seleccione el producto filtrado para actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3_s")
+                    st.markdown("#### ⚙️ Actualización de Estado")
+                    id_seg = st.selectbox("Seleccione el trámite a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3_s")
                     
                     prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
                     if prod_seg:
@@ -468,13 +468,13 @@ def render_ui(user_info: dict):
                             u_doc = st.text_input("N° Doc", value=prod_seg['numero_documento_oc'] or "")
                             u_tram = st.selectbox("Estado", ESTADOS_TRAMITE_PROVEEDOR, index=ESTADOS_TRAMITE_PROVEEDOR.index(prod_seg['tramite_proveedor']) if prod_seg['tramite_proveedor'] in ESTADOS_TRAMITE_PROVEEDOR else 0)
                             u_obs = st.text_area("Obs.", value=prod_seg['observacion_paso3'] or "")
-                            if st.form_submit_button("Guardar"):
+                            if st.form_submit_button("Guardar Cambios"):
                                 conn.cursor().execute("UPDATE productos SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=? WHERE id=?", (u_prov, u_doc, u_tram, u_obs, id_seg))
                                 conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
 
     # --- PASO 4 ---
     elif tab_seleccionada == "📦 4. Bulto/Ubicación":
-        st.header("📦 Paso 4 — Bulto y Ubicaciones")
+        st.markdown("## 📦 Paso 4 — Bulto y Ubicaciones")
         tab_p4_nuevo, tab_p4_seg = st.tabs(["➕ Asignar Nueva Ubicación", "🔄 Seguimiento de Bultos"])
         
         with tab_p4_nuevo:
@@ -485,7 +485,7 @@ def render_ui(user_info: dict):
             else:
                 df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
                 filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p4_n")
                 filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p4_n")
@@ -504,8 +504,8 @@ def render_ui(user_info: dict):
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
                     
-                    st.markdown("### ⚙️ Gestión de Bulto")
-                    prod_id = st.selectbox("Seleccione el producto filtrado:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p4_n")
+                    st.markdown("#### ⚙️ Asignación de Ubicación Física")
+                    prod_id = st.selectbox("Seleccione el producto a gestionar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p4_n")
                     
                     with st.form("form_p4"):
                         ub_fisica, ub_comp = st.selectbox("Ubicación Física *", OPCIONES_FISICA_P4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
@@ -522,7 +522,7 @@ def render_ui(user_info: dict):
             else:
                 df_seg4["Nivel Alerta"] = df_seg4.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
                 filtro_semaforo_seg = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p4_s")
                 filtro_codigo_seg = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p4_s")
@@ -541,8 +541,8 @@ def render_ui(user_info: dict):
                     opciones_id_seg = df_filtrado_seg['ID'].tolist()
                     formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
                     
-                    st.markdown("### ⚙️ Actualización de Ubicación")
-                    id_seg4 = st.selectbox("Seleccione el producto filtrado para actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p4_s")
+                    st.markdown("#### ⚙️ Modificación de Bulto Existente")
+                    id_seg4 = st.selectbox("Seleccione el bulto a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p4_s")
                     
                     prod_seg4 = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg4,)).fetchone()
                     if prod_seg4:
@@ -555,26 +555,26 @@ def render_ui(user_info: dict):
                             u_bulto = st.text_input("N° Bulto", value=prod_seg4['numero_bulto'] or "")
                             u_obs4 = st.text_area("Observaciones", value=prod_seg4['observacion_paso4'] or "")
                             
-                            if st.form_submit_button("Actualizar Ubicación/Bulto"):
+                            if st.form_submit_button("Actualizar Bulto"):
                                 conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
                                 conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
 
     # --- PASO 5 ---
     elif tab_seleccionada == "📜 5. Resolución/Cierre":
-        st.header("📜 Paso 5 — Resolución y Cierre")
+        st.markdown("## 📜 Paso 5 — Resolución y Cierre")
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre General", "🟢 Sin Carta de Canje"])
         
         with tab_p5_cierre:
             df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido'", conn)
             
             if df_p5.empty: 
-                st.info("No hay productos pendientes.")
+                st.info("No hay productos pendientes de cierre.")
             else:
                 df_p5["Nivel Alerta"] = df_p5.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
-                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p5_c")
+                filtro_semaforo = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)", "🚨 ALERTA (ISP)"], placeholder="Seleccione colores...", key="sem_p5_c")
                 filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p5_c")
                 
                 df_filtrado = df_p5.copy()
@@ -591,8 +591,8 @@ def render_ui(user_info: dict):
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
                     
-                    st.markdown("### ⚙️ Cierre de Trámite")
-                    prod_id = st.selectbox("Seleccione el producto filtrado para CERRAR:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p5_c")
+                    st.markdown("#### ⚙️ Cierre Definitivo de Trámite")
+                    prod_id = st.selectbox("Seleccione el producto a CERRAR:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p5_c")
                     
                     with st.form("form_p5"):
                         num_res = st.text_input("N° Resolución o Documento *")
@@ -603,7 +603,7 @@ def render_ui(user_info: dict):
                             "Producto dado de baja",
                             "Retirado por Alerta Sanitaria"
                         ])
-                        obs = st.text_area("Resolución")
+                        obs = st.text_area("Resolución / Comentarios finales")
                         if st.form_submit_button("Finalizar y Archivar"):
                             conn.cursor().execute("UPDATE productos SET resolucion_numero=?, estado_final=?, observacion_paso5=?, estado_global='Concluido' WHERE id=?", (num_res, estado_fin, obs, prod_id))
                             conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
@@ -614,7 +614,7 @@ def render_ui(user_info: dict):
             if not df_p5_sc.empty:
                 df_p5_sc["Nivel Alerta"] = df_p5_sc.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
                 
-                st.markdown("### 🔍 Filtros de Búsqueda")
+                st.markdown("#### 🔍 Filtros de Búsqueda")
                 col_f1, col_f2 = st.columns(2)
                 filtro_semaforo_sc = col_f1.multiselect("Filtrar por Semáforo de Riesgo", ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"], placeholder="Seleccione colores...", key="sem_p5_sc")
                 filtro_codigo_sc = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...", key="cod_p5_sc")
@@ -633,8 +633,8 @@ def render_ui(user_info: dict):
                     opciones_id_sc = df_filtrado_sc['ID'].tolist()
                     formato_opciones_sc = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_sc.iterrows()}
                     
-                    st.markdown("### ⚙️ Gestión a la Red")
-                    id_sc = st.selectbox("Seleccione el producto para Difusión:", opciones_id_sc, format_func=lambda x: formato_opciones_sc[x], key="sel_p5_sc")
+                    st.markdown("#### ⚙️ Opciones de Difusión a la Red")
+                    id_sc = st.selectbox("Seleccione el producto para gestionar:", opciones_id_sc, format_func=lambda x: formato_opciones_sc[x], key="sel_p5_sc")
                     
                     prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
                     if prod_sc:
@@ -642,22 +642,22 @@ def render_ui(user_info: dict):
                             c1, c2 = st.columns(2)
                             with c1: difusion_sel = st.selectbox("DIFUSIÓN A LA RED", OPCIONES_DIFUSION_RED)
                             with c2: redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK", OPCIONES_REDISTRIBUCION_STOCK)
-                            obs_sc = st.text_area("Observaciones", value=prod_sc['observacion_paso5'] or "")
+                            obs_sc = st.text_area("Observaciones Adicionales", value=prod_sc['observacion_paso5'] or "")
                             if st.form_submit_button("Guardar Gestión"):
                                 conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=? WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, id_sc))
                                 conn.commit(); st.success("Guardado."); time.sleep(1); st.rerun()
 
     # --- ALERTAS, CARGA MASIVA Y ADMIN ---
     elif tab_seleccionada == "🚨 Gestión Anexo II (Jefatura)":
-        st.header("🚨 Gestión de Anexo II (Alertas Sanitarias)")
+        st.markdown("## 🚨 Gestión de Anexo II (Alertas Sanitarias)")
         df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND estado_global IN ('CUARENTENA', 'Alerta Notificada al Proveedor')", conn)
         if df_alertas.empty: st.info("No hay Alertas Sanitarias activas pendientes de gestión.")
         else:
             st.dataframe(df_alertas, hide_index=True, use_container_width=True, height=180)
-            id_alerta = st.selectbox("Seleccione ID de Alerta a gestionar", df_alertas['ID'].tolist())
+            id_alerta = st.selectbox("Seleccione Alerta a gestionar", df_alertas['ID'].tolist())
             prod_alerta = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_alerta,)).fetchone()
             if prod_alerta:
-                st.markdown(f"### Redacción de Anexo II para: {prod_alerta['descripcion']}")
+                st.markdown(f"#### 📝 Redacción de Anexo II: **{prod_alerta['descripcion']}**")
                 with st.form("form_anexo_ii"):
                     col1, col2 = st.columns(2)
                     principio_activo = col1.text_input("Principio Activo", value=prod_alerta['principio_activo'] or "")
@@ -679,11 +679,15 @@ def render_ui(user_info: dict):
                             conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
 
     elif tab_seleccionada == "📤 Carga Masiva":
-        st.header("📤 Carga Masiva de Productos (Paso 1)")
+        st.markdown("## 📤 Carga Masiva de Productos")
         df_plantilla = pd.DataFrame([{"BODEGA ORIGEN": "Bodega AZ09 (Fármacos)", "TIPO PRODUCTO": "Fármaco", "CÓDIGO REYIMEN": "1365", "DESCRIPCIÓN": "BUPIVACAINA", "TIPO COMPRA": "CENABAST", "UNIDAD": "FRASCO", "CANTIDAD": 100, "FECHA VENCIMIENTO": "2026-10-31", "LOTE": "L12345"}])
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer: df_plantilla.to_excel(writer, index=False, sheet_name='Plantilla_Carga')
+        
+        st.markdown("#### 1. Descargar Plantilla Modelo")
         st.download_button(label="📥 Descargar Plantilla Excel", data=output.getvalue(), file_name="Plantilla_Carga_Masiva.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        
+        st.markdown("#### 2. Subir Archivo Completado")
         uploaded = st.file_uploader("Subir archivo Excel o CSV", type=["xlsx", "xls", "csv"])
         if uploaded and st.button("🚀 Procesar e Ingresar Productos"):
             ok, msg = procesar_carga_masiva(uploaded, user_info['usuario'])
@@ -691,7 +695,7 @@ def render_ui(user_info: dict):
             else: st.error(msg)
             
     elif tab_seleccionada == "🔍 Consolidado General":
-        st.header("🔍 Consolidado")
+        st.markdown("## 🔍 Consolidado General")
         df_cons = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, motivo_informe AS Motivo, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn)
         
         df_cons["Nivel Alerta"] = df_cons.apply(lambda row: calcular_semaforo_vencimiento(row["Venc"], row["Motivo"]), axis=1)
@@ -700,7 +704,7 @@ def render_ui(user_info: dict):
         st.dataframe(df_cons, hide_index=True)
         
     elif tab_seleccionada == "📊 Dashboard / Análisis":
-        st.header("📊 Dashboard")
+        st.markdown("## 📊 Dashboard y Estadísticas")
         df_all = pd.read_sql_query("SELECT * FROM productos", conn)
         if not df_all.empty:
             df_all["Nivel Alerta"] = df_all.apply(lambda row: calcular_semaforo_vencimiento(row["vencimiento"], row["motivo_informe"]), axis=1)
@@ -709,7 +713,7 @@ def render_ui(user_info: dict):
             amarillas = len(df_all[df_all["Nivel Alerta"] == "🟡 Amarilla (61-120d)"])
             verdes = len(df_all[df_all["Nivel Alerta"] == "🟢 Verde (> 120d)"])
             
-            st.markdown("### 🚦 Semáforo de Riesgo (Vencimientos)")
+            st.markdown("#### 🚦 Semáforo de Riesgo (Vencimientos)")
             sem1, sem2, sem3 = st.columns(3)
             sem1.metric("🔴 Alerta Roja (Crítico)", rojas)
             sem2.metric("🟡 Alerta Amarilla (Tramitación)", amarillas)
@@ -722,14 +726,13 @@ def render_ui(user_info: dict):
             m2.metric("En Trámite Activo", len(df_all[df_all['estado_global'].isin(['En trámite', 'CUARENTENA', 'Alerta Notificada al Proveedor'])]))
             m3.metric("Concluidos", len(df_all[df_all['estado_global'] == 'Concluido']))
             
-            # --- NUEVO: Actualización del contador de Unidades Canjeadas ---
             estados_canje = ['Canjeado - reposición del producto', 'Canjeado - nota de credito recibida']
             canjeadas_df = df_all[df_all['estado_final'].isin(estados_canje)]
             unidades_canjeadas = int(canjeadas_df['cantidad'].sum()) if not canjeadas_df.empty else 0
             m4.metric("Unid. Canjeadas", unidades_canjeadas)
             
     elif tab_seleccionada == "👥 Gestión de Usuarios":
-        st.header("👥 Gestión de Usuarios")
+        st.markdown("## 👥 Gestión de Usuarios")
         tab_crear, tab_editar = st.tabs(["➕ Crear Usuario", "✏️ Editar / Eliminar"])
         with tab_crear:
             with st.form("form_nuevo_usuario"):
