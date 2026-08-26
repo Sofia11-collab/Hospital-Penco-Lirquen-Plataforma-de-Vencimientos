@@ -179,6 +179,26 @@ def render_ui(user_info: dict):
     idx_tema = opciones_temas.index(tema_actual)
     aplicar_estilo_tema(tema_actual)
 
+    # Configuración maestra para el ancho de las columnas de todas las tablas
+    # Esto evita el scroll horizontal y hace que la "Descripción" tenga más espacio
+    cfg_columnas = {
+        "ID": st.column_config.NumberColumn("ID", width="small"),
+        "Nivel Alerta": st.column_config.TextColumn("Alerta", width="small"),
+        "Código": st.column_config.TextColumn("Código", width="small"),
+        "Lote": st.column_config.TextColumn("Lote", width="small"),
+        "Cant": st.column_config.NumberColumn("Cant.", width="small"),
+        "Cant.": st.column_config.NumberColumn("Cant.", width="small"),
+        "Compra": st.column_config.TextColumn("Compra", width="small"),
+        "Bodega": st.column_config.TextColumn("Bodega", width="medium"),
+        "Física": st.column_config.TextColumn("Ubic. Física", width="medium"),
+        "Bulto": st.column_config.TextColumn("Bulto", width="small"),
+        "Proveedor": st.column_config.TextColumn("Proveedor", width="medium"),
+        "Trámite": st.column_config.TextColumn("Trámite", width="medium"),
+        "Doc": st.column_config.TextColumn("N° Doc", width="small"),
+        "Canje": st.column_config.TextColumn("Canje", width="small"),
+        "Descripción": st.column_config.TextColumn("Descripción del Producto", width="large")
+    }
+
     col_user, col_rol, col_btn = st.columns([5, 4, 2], vertical_alignment="center")
     with col_user: st.markdown(f"👤 **Usuario:** {user_info['nombre_completo']}")
     with col_rol: st.markdown(f"🛡️ **Rol:** `{user_info['rol'].upper()}`")
@@ -314,8 +334,9 @@ def render_ui(user_info: dict):
                 if df_filtrado.empty:
                     st.warning("No hay registros que coincidan con los filtros.")
                 else:
-                    cols_mostrar = ["ID", "Nivel Alerta", "Bodega", "Código", "Descripción", "Lote", "Motivo", "Estado"]
-                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    # Reducimos las columnas visibles a 6 esenciales para evitar scroll horizontal
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Lote"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
@@ -369,8 +390,8 @@ def render_ui(user_info: dict):
             if df_filtrado.empty:
                 st.warning("No hay productos pendientes que coincidan con los filtros seleccionados.")
             else:
-                cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote"]
-                st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant"]
+                st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                 
                 opciones_id = df_filtrado['ID'].tolist()
                 formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
@@ -411,8 +432,8 @@ def render_ui(user_info: dict):
                 if df_filtrado.empty:
                     st.warning("No hay productos pendientes que coincidan con los filtros.")
                 else:
-                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Cant", "Lote", "Canje"]
-                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Cant", "Lote"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
@@ -452,8 +473,8 @@ def render_ui(user_info: dict):
                 if df_filtrado_seg.empty:
                     st.warning("No hay trámites que coincidan con los filtros.")
                 else:
-                    cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Proveedor", "Trámite", "Doc"]
-                    st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180)
+                    cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Proveedor", "Trámite"]
+                    st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id_seg = df_filtrado_seg['ID'].tolist()
                     formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
@@ -499,7 +520,7 @@ def render_ui(user_info: dict):
                     st.warning("No hay productos que coincidan con los filtros.")
                 else:
                     cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Proveedor"]
-                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
@@ -536,7 +557,7 @@ def render_ui(user_info: dict):
                     st.warning("No hay bultos que coincidan con los filtros.")
                 else:
                     cols_mostrar_seg = ["ID", "Nivel Alerta", "Código", "Descripción", "Física", "Bulto"]
-                    st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180)
+                    st.dataframe(df_filtrado_seg[cols_mostrar_seg], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id_seg = df_filtrado_seg['ID'].tolist()
                     formato_opciones_seg = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_seg.iterrows()}
@@ -585,8 +606,8 @@ def render_ui(user_info: dict):
                 if df_filtrado.empty:
                     st.warning("No hay productos que coincidan con los filtros.")
                 else:
-                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Proveedor", "Bulto"]
-                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180)
+                    cols_mostrar = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Bulto"]
+                    st.dataframe(df_filtrado[cols_mostrar], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id = df_filtrado['ID'].tolist()
                     formato_opciones = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado.iterrows()}
@@ -628,7 +649,7 @@ def render_ui(user_info: dict):
                     st.warning("No hay productos sin canje que coincidan con los filtros.")
                 else:
                     cols_mostrar_sc = ["ID", "Nivel Alerta", "Código", "Descripción", "Lote", "Canje"]
-                    st.dataframe(df_filtrado_sc[cols_mostrar_sc], hide_index=True, use_container_width=True, height=180)
+                    st.dataframe(df_filtrado_sc[cols_mostrar_sc], hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
                     
                     opciones_id_sc = df_filtrado_sc['ID'].tolist()
                     formato_opciones_sc = {row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" for idx, row in df_filtrado_sc.iterrows()}
@@ -653,7 +674,7 @@ def render_ui(user_info: dict):
         df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND estado_global IN ('CUARENTENA', 'Alerta Notificada al Proveedor')", conn)
         if df_alertas.empty: st.info("No hay Alertas Sanitarias activas pendientes de gestión.")
         else:
-            st.dataframe(df_alertas, hide_index=True, use_container_width=True, height=180)
+            st.dataframe(df_alertas, hide_index=True, use_container_width=True, height=180, column_config=cfg_columnas)
             id_alerta = st.selectbox("Seleccione Alerta a gestionar", df_alertas['ID'].tolist())
             prod_alerta = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_alerta,)).fetchone()
             if prod_alerta:
@@ -701,7 +722,7 @@ def render_ui(user_info: dict):
         df_cons["Nivel Alerta"] = df_cons.apply(lambda row: calcular_semaforo_vencimiento(row["Venc"], row["Motivo"]), axis=1)
         cols_cons = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Cant", "Lote", "Venc", "Estado", "Proveedor"]
         df_cons = df_cons[cols_cons]
-        st.dataframe(df_cons, hide_index=True)
+        st.dataframe(df_cons, hide_index=True, column_config=cfg_columnas)
         
     elif tab_seleccionada == "📊 Dashboard / Análisis":
         st.markdown("## 📊 Dashboard y Estadísticas")
