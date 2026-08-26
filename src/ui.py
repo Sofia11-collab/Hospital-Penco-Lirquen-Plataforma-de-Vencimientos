@@ -400,20 +400,28 @@ def render_ui(user_info: dict):
                 with st.form("form_paso2"):
                     aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
                     obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
-                    # --- NUEVO: Carga de Archivo Adjunto en Paso 2 ---
                     archivo_adjunto = st.file_uploader("📎 Adjuntar Carta de Canje o Respaldo (Opcional)", type=["pdf", "png", "jpg", "jpeg", "docx", "doc"])
                     
-                    if st.form_submit_button("Avanzar a Paso 3"):
+                    # --- NUEVO: Atajo si NO aplica canje ---
+                    if st.form_submit_button("Guardar y Avanzar"):
+                        siguiente_paso = 4 if aplica_canje == "No aplica" else 3
+                        
                         archivo_b64 = ""
                         nombre_archivo = ""
                         if archivo_adjunto is not None:
                             archivo_b64 = base64.b64encode(archivo_adjunto.read()).decode()
                             nombre_archivo = archivo_adjunto.name
-                            conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3, archivo_canje=?, nombre_archivo_canje=? WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), archivo_b64, nombre_archivo, prod_id))
+                            conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=?, archivo_canje=?, nombre_archivo_canje=? WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), siguiente_paso, archivo_b64, nombre_archivo, prod_id))
                         else:
-                            conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3 WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), prod_id))
+                            conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=? WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), siguiente_paso, prod_id))
                         
-                        conn.commit(); st.success("Avanzado con éxito."); time.sleep(1.5); st.rerun()
+                        conn.commit()
+                        if siguiente_paso == 4:
+                            st.success("Al no aplicar canje, el producto avanzó directamente al Paso 4.")
+                        else:
+                            st.success("Avanzado al Paso 3 con éxito.")
+                        time.sleep(2)
+                        st.rerun()
 
     # --- PASO 3 ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
@@ -453,7 +461,6 @@ def render_ui(user_info: dict):
                     obs_previa = df_filtrado.loc[df_filtrado['ID'] == prod_id, 'Obs_P2'].values[0]
                     if obs_previa: st.info(f"📝 **Instrucciones de Jefatura:** {obs_previa}")
                     
-                    # --- NUEVO: Descarga de Archivo Adjunto en Paso 3 ---
                     prod_data_file = conn.cursor().execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=?", (prod_id,)).fetchone()
                     if prod_data_file and prod_data_file['archivo_canje']:
                         st.info("📎 Jefatura ha adjuntado un documento de respaldo para este canje:")
@@ -753,7 +760,6 @@ def render_ui(user_info: dict):
             amarillas = len(df_all[df_all["Nivel Alerta"] == "🟡 Amarilla (61-120d)"])
             verdes = len(df_all[df_all["Nivel Alerta"] == "🟢 Verde (> 120d)"])
             
-            # --- NUEVO: Exportar Consolidado a Excel ---
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_all.to_excel(writer, index=False, sheet_name='Consolidado')
@@ -768,7 +774,6 @@ def render_ui(user_info: dict):
             
             st.markdown("#### 🚦 Semáforo de Riesgo (Vencimientos)")
             
-            # --- NUEVO: Gráfico Visual de Procesos ---
             chart_data = pd.DataFrame({
                 "Nivel de Riesgo": ["1. Crítico (Roja)", "2. Tramitación (Amarilla)", "3. Seguro (Verde)"],
                 "Cantidad": [rojas, amarillas, verdes]
