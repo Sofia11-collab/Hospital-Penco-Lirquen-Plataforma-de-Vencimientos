@@ -688,16 +688,17 @@ def render_ui(user_info: dict):
                     prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
                     if prod_sc:
                         with st.form("form_paso5_sin_canje"):
-                            st.caption("Opciones de Gestión de Red (Opcional)")
+                            st.markdown("<p style='color: #475569; font-size: 14px; font-weight: 600; margin-bottom: 0;'>Opciones de Gestión de Red (Opcional)</p>", unsafe_allow_html=True)
                             c1, c2 = st.columns(2)
-                            with c1: difusion_sel = st.selectbox("DIFUSIÓN A LA RED", OPCIONES_DIFUSION_RED)
-                            with c2: redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK", OPCIONES_REDISTRIBUCION_STOCK)
+                            with c1: difusion_sel = st.selectbox("DIFUSIÓN A LA RED", OPCIONES_DIFUSION_RED, label_visibility="collapsed")
+                            with c2: redistribucion_sel = st.selectbox("REDISTRIBUCIÓN STOCK", OPCIONES_REDISTRIBUCION_STOCK, label_visibility="collapsed")
                             
-                            st.divider()
-                            st.caption("Resolución Final")
+                            st.markdown("<hr style='margin: 10px 0px; border-top: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
+                            st.markdown("<p style='color: #475569; font-size: 14px; font-weight: 600; margin-bottom: 0;'>Resolución Final</p>", unsafe_allow_html=True)
+                            
                             num_res_sc = st.text_input("N° Resolución o Documento de Baja *")
-                            estado_fin_sc = st.selectbox("Estado Final *", ["Producto dado de baja", "Producto donado"])
-                            obs_sc = st.text_area("Resolución / Comentarios finales", value=prod_sc['observacion_paso5'] or "")
+                            estado_fin_sc = st.selectbox("Estado Final *", ["Producto dado de baja", "Producto donado"], label_visibility="collapsed")
+                            obs_sc = st.text_area("Resolución / Comentarios finales", value=prod_sc['observacion_paso5'] or "", label_visibility="collapsed")
                             
                             if st.form_submit_button("Finalizar y Archivar"):
                                 conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=?, resolucion_numero=?, estado_final=?, estado_global='Concluido' WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, num_res_sc, estado_fin_sc, id_sc))
