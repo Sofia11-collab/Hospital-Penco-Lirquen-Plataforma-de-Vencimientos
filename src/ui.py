@@ -80,7 +80,7 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {{ opacity: 1 !important; background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important; box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important; color: #0f172a !important; transition: all 0.3s ease; z-index: 999999 !important; }}
         [data-testid="collapsedControl"]:hover, [data-testid="stSidebarCollapsedControl"]:hover {{ background-color: #f1f5f9 !important; border-color: #94a3b8 !important; }}
         [data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg {{ fill: #0f172a !important; color: #0f172a !important; }}
-        div[data-baseweb="select"] > div, .stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
+        div[data-baseweb="select"] > div, .stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"], div[data-baseweb="popover"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
         div[data-baseweb="select"] * {{ color: #0f172a !important; }}
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #ffffff !important; color: #0f172a !important; }}
         ul[data-testid="stSelectboxVirtualDropdown"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
@@ -292,7 +292,6 @@ def render_ui(user_info: dict):
 
         with tab_p1_editar:
             st.subheader("Registros Ingresados en Paso 1 (Modificables)")
-            # SOLUCIÓN DEL ERROR: Ahora busca en el paso 1, paso 2 o cuarentena.
             df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'", conn)
             if df_p1.empty: st.info("No hay registros.")
             else:
@@ -322,7 +321,9 @@ def render_ui(user_info: dict):
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
         df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
-        if df.empty: st.info("No hay productos pendientes de canje comercial.")
+        
+        if df.empty: 
+            st.info("No hay productos pendientes de canje comercial.")
         else:
             hoy = datetime.now().date()
             df["Meses Vencer"] = df["Vencimiento"].apply(lambda v: max(0.0, round((datetime.strptime(str(v), "%Y-%m-%d").date() - hoy).days / 30.44, 1)) if pd.notnull(v) else 0.0)
@@ -330,17 +331,56 @@ def render_ui(user_info: dict):
             columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote", "Vencimiento"]
             df = df[columnas_orden]
             
-            st.dataframe(df, hide_index=True, use_container_width=True, height=180)
-            prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
+            # --- NUEVO: Filtros Estilo Retail ---
+            st.markdown("### 🔍 Filtros de Búsqueda")
+            col_f1, col_f2 = st.columns(2)
             
-            with st.form("form_paso2"):
-                aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
-                obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
+            # El multiselect genera exactamente esas etiquetas visuales con la "X"
+            filtro_semaforo = col_f1.multiselect(
+                "Filtrar por Semáforo de Riesgo", 
+                ["🔴 Roja (≤ 60d)", "🟡 Amarilla (61-120d)", "🟢 Verde (> 120d)"],
+                placeholder="Seleccione los colores..."
+            )
+            filtro_codigo = col_f2.text_input("Filtrar por Código Reyimen", placeholder="Ej: 543...")
+            
+            # Aplicamos los filtros a los datos
+            df_filtrado = df.copy()
+            if filtro_semaforo:
+                df_filtrado = df_filtrado[df_filtrado["Nivel Alerta"].isin(filtro_semaforo)]
+            if filtro_codigo:
+                df_filtrado = df_filtrado[df_filtrado["Código"].astype(str).str.contains(filtro_codigo, case=False, na=False)]
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.dataframe(df_filtrado, hide_index=True, use_container_width=True, height=180)
+            
+            if not df_filtrado.empty:
+                # --- NUEVO: Selección de producto más amigable ---
+                opciones_id = df_filtrado['ID'].tolist()
                 
-                if st.form_submit_button("Avanzar a Paso 3"):
-                    conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3 WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), prod_id))
-                    conn.commit()
-                    st.success("Producto avanzado al Paso 3."); time.sleep(1.5); st.rerun()
+                # Creamos un diccionario para que la caja desplegable no muestre un simple número
+                # sino: "543 - SUERO ANTI A (Lote: 56651fg)"
+                formato_opciones = {
+                    row['ID']: f"{row['Código']} - {row['Descripción']} (Lote: {row['Lote']})" 
+                    for idx, row in df_filtrado.iterrows()
+                }
+                
+                st.markdown("### ⚙️ Gestión del Producto")
+                prod_id = st.selectbox(
+                    "Seleccione el producto filtrado que desea gestionar:", 
+                    opciones_id, 
+                    format_func=lambda x: formato_opciones[x]
+                )
+                
+                with st.form("form_paso2"):
+                    aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
+                    obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
+                    
+                    if st.form_submit_button("Avanzar a Paso 3"):
+                        conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=3 WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), prod_id))
+                        conn.commit()
+                        st.success("Producto avanzado al Paso 3."); time.sleep(1.5); st.rerun()
+            else:
+                st.warning("No hay productos pendientes que coincidan con los filtros seleccionados.")
 
     # --- PASO 3 ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
