@@ -99,6 +99,24 @@ def aplicar_estilo_tema(nombre_tema):
     """
     st.markdown(css, unsafe_allow_html=True)
 
+def calcular_semaforo_vencimiento(fecha_str, motivo):
+    """Calcula el nivel de alerta según los días restantes."""
+    if motivo == "Alerta Sanitaria":
+        return "🚨 ALERTA (ISP)"
+    if not fecha_str or pd.isna(fecha_str): 
+        return "⚪ N/A"
+    try:
+        venc = datetime.strptime(str(fecha_str), "%Y-%m-%d").date()
+        dias = (venc - datetime.now().date()).days
+        if dias <= 60:
+            return "🔴 Roja (≤ 60d)"
+        elif dias <= 120:
+            return "🟡 Amarilla (61-120d)"
+        else:
+            return "🟢 Verde (> 120d)"
+    except:
+        return "⚪ Error Fecha"
+
 def generar_anexo_ii_docx(datos):
     doc = Document()
     p_membrete = doc.add_paragraph()
@@ -277,7 +295,7 @@ def render_ui(user_info: dict):
             df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual = 1 OR estado_global = 'CUARENTENA'", conn)
             if df_p1.empty: st.info("No hay registros.")
             else:
-                st.dataframe(df_p1, hide_index=True, use_container_width=True)
+                st.dataframe(df_p1, hide_index=True, use_container_width=True, height=180)
                 id_mod = st.selectbox("Seleccione ID", df_p1['ID'].tolist())
                 prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
                 if prod_data:
@@ -302,16 +320,18 @@ def render_ui(user_info: dict):
     # --- PASO 2 ---
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
         st.header("⚖️ Paso 2 — Gestión de Canjes (Jefatura)")
-        df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+        df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
         if df.empty: st.info("No hay productos pendientes de canje comercial.")
         else:
-            hoy = datetime.now().date()
-            df["Meses Vencer"] = df["Vencimiento"].apply(lambda v: max(0.0, round((datetime.strptime(str(v), "%Y-%m-%d").date() - hoy).days / 30.44, 1)) if pd.notnull(v) else 0.0)
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            # APLICACIÓN DE SEMÁFORO EN PASO 2
+            df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
+            columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Cant", "Lote", "Vencimiento"]
+            df = df[columnas_orden]
+            
+            st.dataframe(df, hide_index=True, use_container_width=True, height=180)
             prod_id = st.selectbox("Seleccione ID de Producto a gestionar", df['ID'].tolist())
             
             with st.form("form_paso2"):
-                # MEJORA: Solo 2 opciones y se agrega campo de observaciones
                 aplica_canje = st.selectbox("¿Aplica Canje? *", ["Aplica", "No aplica"])
                 obs_jefatura = st.text_area("Observaciones (Normas del proveedor, exigencias, etc.)")
                 
@@ -328,17 +348,15 @@ def render_ui(user_info: dict):
         with tab_p3_nuevo:
             df_p3_nuevo = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, estado_canje AS Canje, observacion_paso2 AS Obs_P2 FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'", conn)
             
-            # MEJORA: Buscador / Filtro por Código Reyimen
             filtro_cod = st.text_input("🔍 Filtrar lista por Código Reyimen (Opcional)")
             if filtro_cod:
                 df_p3_nuevo = df_p3_nuevo[df_p3_nuevo['Código'].astype(str).str.contains(filtro_cod, case=False, na=False)]
             
             if df_p3_nuevo.empty: st.info("No hay nuevos productos.")
             else:
-                st.dataframe(df_p3_nuevo.drop(columns=['Obs_P2']), hide_index=True, use_container_width=True)
+                st.dataframe(df_p3_nuevo.drop(columns=['Obs_P2']), hide_index=True, use_container_width=True, height=180)
                 prod_id = st.selectbox("Seleccione ID a ingresar trámite", df_p3_nuevo['ID'].tolist())
                 
-                # MEJORA: Mostrar observaciones de Jefatura (Paso 2)
                 obs_previa = df_p3_nuevo.loc[df_p3_nuevo['ID'] == prod_id, 'Obs_P2'].values[0]
                 if obs_previa:
                     st.info(f"📝 **Instrucciones/Observaciones de Jefatura:** {obs_previa}")
@@ -354,7 +372,7 @@ def render_ui(user_info: dict):
         with tab_p3_seguimiento:
             df_p3_seg = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, proveedor AS Proveedor, tramite_proveedor AS Trámite, numero_documento_oc AS Doc FROM productos WHERE paso_actual >= 3 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
             if not df_p3_seg.empty:
-                st.dataframe(df_p3_seg, hide_index=True, use_container_width=True)
+                st.dataframe(df_p3_seg, hide_index=True, use_container_width=True, height=180)
                 id_seg = st.selectbox("Seleccione ID a actualizar", df_p3_seg['ID'].tolist())
                 prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
                 if prod_seg:
@@ -370,15 +388,13 @@ def render_ui(user_info: dict):
     # --- PASO 4 ---
     elif tab_seleccionada == "📦 4. Bulto/Ubicación":
         st.header("📦 Paso 4 — Bulto y Ubicaciones")
-        
-        # MEJORA: Sistema de doble pestaña (Nuevo vs Seguimiento)
         tab_p4_nuevo, tab_p4_seg = st.tabs(["➕ Asignar Nueva Ubicación", "🔄 Seguimiento de Bultos"])
         
         with tab_p4_nuevo:
             df = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
             if df.empty: st.info("No hay productos pendientes de asignación de bulto.")
             else:
-                st.dataframe(df, hide_index=True, use_container_width=True)
+                st.dataframe(df, hide_index=True, use_container_width=True, height=180)
                 prod_id = st.selectbox("ID de Producto", df['ID'].tolist())
                 with st.form("form_p4"):
                     ub_fisica, ub_comp = st.selectbox("Ubicación Física *", OPCIONES_FISICA_P4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
@@ -391,7 +407,7 @@ def render_ui(user_info: dict):
             df_seg4 = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, ubicacion_fisica AS Física, numero_bulto AS Bulto FROM productos WHERE paso_actual >= 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
             if df_seg4.empty: st.info("No hay bultos activos en seguimiento.")
             else:
-                st.dataframe(df_seg4, hide_index=True, use_container_width=True)
+                st.dataframe(df_seg4, hide_index=True, use_container_width=True, height=180)
                 id_seg4 = st.selectbox("ID de Producto a actualizar", df_seg4['ID'].tolist())
                 prod_seg4 = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg4,)).fetchone()
                 if prod_seg4:
@@ -416,7 +432,7 @@ def render_ui(user_info: dict):
             df_p5 = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido'", conn)
             if df_p5.empty: st.info("No hay productos pendientes.")
             else:
-                st.dataframe(df_p5, hide_index=True, use_container_width=True)
+                st.dataframe(df_p5, hide_index=True, use_container_width=True, height=180)
                 prod_id = st.selectbox("ID a CERRAR", df_p5['ID'].tolist())
                 with st.form("form_p5"):
                     num_res = st.text_input("N° Resolución o Documento *")
@@ -428,7 +444,7 @@ def render_ui(user_info: dict):
         with tab_p5_sin_canje:
             df_p5_sc = pd.read_sql_query("SELECT id AS ID, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje FROM productos WHERE (estado_canje = 'No aplica' OR estado_canje LIKE '%compra propia%') AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
             if not df_p5_sc.empty:
-                st.dataframe(df_p5_sc, hide_index=True, use_container_width=True)
+                st.dataframe(df_p5_sc, hide_index=True, use_container_width=True, height=180)
                 id_sc = st.selectbox("Seleccione ID para Difusión", df_p5_sc['ID'].tolist())
                 prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
                 if prod_sc:
@@ -447,7 +463,7 @@ def render_ui(user_info: dict):
         df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND estado_global IN ('CUARENTENA', 'Alerta Notificada al Proveedor')", conn)
         if df_alertas.empty: st.info("No hay Alertas Sanitarias activas pendientes de gestión.")
         else:
-            st.dataframe(df_alertas, hide_index=True, use_container_width=True)
+            st.dataframe(df_alertas, hide_index=True, use_container_width=True, height=180)
             id_alerta = st.selectbox("Seleccione ID de Alerta a gestionar", df_alertas['ID'].tolist())
             prod_alerta = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_alerta,)).fetchone()
             if prod_alerta:
@@ -486,18 +502,69 @@ def render_ui(user_info: dict):
             
     elif tab_seleccionada == "🔍 Consolidado General":
         st.header("🔍 Consolidado")
-        st.dataframe(pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn), hide_index=True)
+        df_cons = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, motivo_informe AS Motivo, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn)
+        
+        # APLICACIÓN SEMÁFORO EN CONSOLIDADO
+        df_cons["Nivel Alerta"] = df_cons.apply(lambda row: calcular_semaforo_vencimiento(row["Venc"], row["Motivo"]), axis=1)
+        # Reordenamos para que el semáforo quede al principio
+        cols_cons = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Cant", "Lote", "Venc", "Estado", "Proveedor"]
+        df_cons = df_cons[cols_cons]
+        st.dataframe(df_cons, hide_index=True)
+        
     elif tab_seleccionada == "📊 Dashboard / Análisis":
         st.header("📊 Dashboard")
         df_all = pd.read_sql_query("SELECT * FROM productos", conn)
         if not df_all.empty:
+            df_all["Nivel Alerta"] = df_all.apply(lambda row: calcular_semaforo_vencimiento(row["vencimiento"], row["motivo_informe"]), axis=1)
+            
+            # Contadores de Semáforo
+            rojas = len(df_all[df_all["Nivel Alerta"] == "🔴 Roja (≤ 60d)"])
+            amarillas = len(df_all[df_all["Nivel Alerta"] == "🟡 Amarilla (61-120d)"])
+            verdes = len(df_all[df_all["Nivel Alerta"] == "🟢 Verde (> 120d)"])
+            
+            st.markdown("### 🚦 Semáforo de Riesgo (Vencimientos)")
+            sem1, sem2, sem3 = st.columns(3)
+            sem1.metric("🔴 Alerta Roja (Crítico)", rojas)
+            sem2.metric("🟡 Alerta Amarilla (Tramitación)", amarillas)
+            sem3.metric("🟢 Alerta Verde (Monitoreo)", verdes)
+            
+            st.markdown("---")
+            
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Trámites Totales", len(df_all))
             m2.metric("En Trámite Activo", len(df_all[df_all['estado_global'].isin(['En trámite', 'CUARENTENA', 'Alerta Notificada al Proveedor'])]))
             m3.metric("Concluidos", len(df_all[df_all['estado_global'] == 'Concluido']))
             m4.metric("Unid. Canjeadas", int(df_all[df_all['estado_final'] == 'Canjeado']['cantidad'].sum() if not df_all[df_all['estado_final'] == 'Canjeado'].empty else 0))
+            
     elif tab_seleccionada == "👥 Gestión de Usuarios":
         st.header("👥 Gestión de Usuarios")
-        st.info("Módulo activo.")
+        tab_crear, tab_editar = st.tabs(["➕ Crear Usuario", "✏️ Editar / Eliminar"])
+        with tab_crear:
+            with st.form("form_nuevo_usuario"):
+                u_user, u_pass = st.text_input("Usuario"), st.text_input("Contraseña", type="password")
+                u_nombre, u_rol = st.text_input("Nombre"), st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"])
+                if st.form_submit_button("Crear"):
+                    conn.cursor().execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
+                    conn.commit()
+                    st.success("Usuario creado."); time.sleep(1); st.rerun()
+            st.dataframe(pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn), hide_index=True, use_container_width=True, height=180)
+        with tab_editar:
+            df_users_edit = pd.read_sql_query("SELECT * FROM usuarios", conn)
+            if not df_users_edit.empty:
+                id_mod = st.selectbox("ID a Modificar", df_users_edit['id'].tolist())
+                user_data = conn.cursor().execute("SELECT * FROM usuarios WHERE id=?", (id_mod,)).fetchone()
+                if user_data:
+                    with st.form("form_editar_usuario"):
+                        new_u_nombre, new_u_user = st.text_input("Nombre", value=user_data['nombre_completo']), st.text_input("Usuario", value=user_data['usuario'])
+                        new_u_rol, new_u_estado = st.selectbox("Rol", ["admin", "jefatura", "registro", "bodega"]), st.selectbox("Estado", ["Activo", "Inactivo"])
+                        new_u_pass = st.text_input("Nueva Contraseña (Opcional)", type="password")
+                        b1, b2 = st.columns(2)
+                        if b1.form_submit_button("Guardar"):
+                            if new_u_pass.strip(): conn.cursor().execute("UPDATE usuarios SET usuario=?, password=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_pass, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            else: conn.cursor().execute("UPDATE usuarios SET usuario=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
+                        if b2.form_submit_button("Eliminar"):
+                            conn.cursor().execute("DELETE FROM usuarios WHERE id=?", (id_mod,))
+                            conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
     conn.close()
