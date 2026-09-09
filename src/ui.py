@@ -235,7 +235,6 @@ def render_ui(user_info: dict):
         if rol in ["admin", "jefatura_admin", "jefatura"]: 
             tabs_disponibles.append("📜 5. Resolución/Cierre")
             
-    # --- NUEVA ESTRUCTURA PARA ALERTAS SANITARIAS ---
     elif modulo_sel == "🚨 Alertas Sanitarias":
         if rol in ["admin", "jefatura_admin", "bodega"]: 
             tabs_disponibles.append("📋 1. Ingresar Nueva Alerta")
@@ -303,7 +302,12 @@ def render_ui(user_info: dict):
                     vencimiento = c1.date_input("Fecha de Vencimiento *")
                     lote = c2.text_input("Lote *")
                 else:
-                    tipo_compra = c1.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
+                    # --- NUEVO: Validación de tipo de compra dinámico para farmacia ---
+                    if "farmacia" in bodega.lower():
+                        tipo_compra = c1.selectbox("Tipo de compra", ["Desconocido (Farmacia)", "CENABAST", "Compra propia"])
+                    else:
+                        tipo_compra = c1.selectbox("Tipo de compra *", ["CENABAST", "Compra propia"])
+                    
                     vencimiento = c2.date_input("Fecha de Vencimiento *")
                     lote = c1.text_input("Lote *")
                 
@@ -315,7 +319,7 @@ def render_ui(user_info: dict):
                         if conn.cursor().fetchone(): st.warning("⚠️ Este producto ya fue ingresado y está activo.")
                         else:
                             estado_inicial = 'CUARENTENA' if es_modulo_alerta else 'En trámite'
-                            ub_fisica = ""
+                            ub_fisica = "Bodega de Excluidos" if es_modulo_alerta else ""
                             bulto = ""
                             a_num = alerta_numero if es_modulo_alerta else ""
                             a_fec = str(alerta_fecha) if es_modulo_alerta else ""
@@ -626,6 +630,7 @@ def render_ui(user_info: dict):
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre con Carta de Canje", "🟢 Cierre sin Carta de Canje"])
         
         with tab_p5_cierre:
+            # Solo productos CON canje ("Aplica")
             df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5.empty: 
@@ -668,6 +673,7 @@ def render_ui(user_info: dict):
                             conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
                             
         with tab_p5_sin_canje:
+            # Solo productos SIN canje ("No aplica" o compras propias)
             df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, estado_canje AS Canje, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'", conn)
             
             if df_p5_sc.empty:
@@ -716,7 +722,7 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=?, resolucion_numero=?, estado_final=?, estado_global='Concluido' WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, num_res_sc, estado_fin_sc, id_sc))
                                 conn.commit(); st.success("Archivado con éxito."); time.sleep(1.5); st.rerun()
 
-    # --- PASO 2 Y 3 (ALERTAS SANITARIAS) ---
+    # --- ALERTAS, CARGA MASIVA Y ADMIN ---
     elif tab_seleccionada == "🚨 2. Gestión Anexo II":
         st.markdown("## 🚨 Paso 2 — Anexo II (Alertas Sanitarias)")
         df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS 'Cant.', proveedor AS 'Proveedor Asignado', estado_global AS Estado FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 2", conn)
