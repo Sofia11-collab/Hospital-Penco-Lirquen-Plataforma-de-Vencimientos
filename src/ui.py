@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from openpyxl.worksheet.datavalidation import DataValidation
 from src.database import get_connection
 from src.catalogo import (
     get_catalogo, get_opciones_selectbox, buscar_por_etiqueta,
@@ -302,7 +303,6 @@ def render_ui(user_info: dict):
                     vencimiento = c1.date_input("Fecha de Vencimiento *")
                     lote = c2.text_input("Lote *")
                 else:
-                    # --- NUEVO: Validación de tipo de compra dinámico para farmacia ---
                     if "farmacia" in bodega.lower():
                         tipo_compra = c1.selectbox("Tipo de compra", ["Desconocido (Farmacia)", "CENABAST", "Compra propia"])
                     else:
@@ -379,7 +379,7 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("DELETE FROM productos WHERE id=?", (id_mod,))
                                 conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
-    # --- PASO 2 (VENCIMIENTOS) ---
+    # --- PASO 2 ---
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
         st.markdown("## ⚖️ Paso 2 — Gestión de Canjes")
         df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
@@ -440,7 +440,7 @@ def render_ui(user_info: dict):
                         time.sleep(2)
                         st.rerun()
 
-    # --- PASO 3 (VENCIMIENTOS) ---
+    # --- PASO 3 ---
     elif tab_seleccionada == "🚚 3. Registro/Prov.":
         st.markdown("## 🚚 Paso 3 — Registro y Proveedor")
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso", "🔄 Seguimiento de Trámites"])
@@ -537,7 +537,7 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("UPDATE productos SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=? WHERE id=?", (u_prov, u_doc, u_tram, u_obs, id_seg))
                                 conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
 
-    # --- PASO 4 (VENCIMIENTOS) ---
+    # --- PASO 4 ---
     elif tab_seleccionada == "📦 4. Bulto/Ubicación":
         st.markdown("## 📦 Paso 4 — Bulto y Ubicaciones")
         tab_p4_nuevo, tab_p4_seg = st.tabs(["➕ Asignar Nueva Ubicación", "🔄 Seguimiento de Bultos"])
@@ -624,7 +624,7 @@ def render_ui(user_info: dict):
                                 conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
                                 conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
 
-    # --- PASO 5 (VENCIMIENTOS) ---
+    # --- PASO 5 ---
     elif tab_seleccionada == "📜 5. Resolución/Cierre":
         st.markdown("## 📜 Paso 5 — Resolución y Cierre")
         tab_p5_cierre, tab_p5_sin_canje = st.tabs(["🔒 Cierre con Carta de Canje", "🟢 Cierre sin Carta de Canje"])
@@ -831,12 +831,36 @@ def render_ui(user_info: dict):
     # --- CARGA MASIVA Y REPORTES ---
     elif tab_seleccionada == "📤 Carga Masiva":
         st.markdown("## 📤 Carga Masiva de Productos")
+        
+        # --- NUEVO: Generar plantilla Excel con Listas Desplegables ---
         df_plantilla = pd.DataFrame([{"BODEGA ORIGEN": "Bodega AZ09 (Fármacos)", "TIPO PRODUCTO": "Fármaco", "CÓDIGO REYIMEN": "1365", "DESCRIPCIÓN": "BUPIVACAINA", "TIPO COMPRA": "CENABAST", "UNIDAD": "FRASCO", "CANTIDAD": 100, "FECHA VENCIMIENTO": "2026-10-31", "LOTE": "L12345"}])
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer: df_plantilla.to_excel(writer, index=False, sheet_name='Plantilla_Carga')
-        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_plantilla.to_excel(writer, index=False, sheet_name='Plantilla_Carga')
+            worksheet = writer.sheets['Plantilla_Carga']
+            
+            # Crear reglas de validación
+            dv_bodega = DataValidation(type="list", formula1=f'"{",".join(BODEGAS_OFICIALES)}"', allow_blank=False)
+            dv_tipo = DataValidation(type="list", formula1='"Fármaco,Insumo"', allow_blank=False)
+            dv_compra = DataValidation(type="list", formula1='"CENABAST,Compra propia,Desconocido (Farmacia)"', allow_blank=False)
+            
+            # Añadir reglas a la hoja
+            worksheet.add_data_validation(dv_bodega)
+            worksheet.add_data_validation(dv_tipo)
+            worksheet.add_data_validation(dv_compra)
+            
+            # Aplicar reglas a las columnas correspondientes (Filas 2 a 1000)
+            dv_bodega.add('A2:A1000') # Columna A: BODEGA ORIGEN
+            dv_tipo.add('B2:B1000')   # Columna B: TIPO PRODUCTO
+            dv_compra.add('E2:E1000') # Columna E: TIPO COMPRA
+            
+            # Dar un ancho razonable a las columnas para que se lean bien
+            anchos = {'A': 28, 'B': 18, 'C': 18, 'D': 45, 'E': 25, 'F': 15, 'G': 12, 'H': 22, 'I': 15}
+            for col, ancho in anchos.items():
+                worksheet.column_dimensions[col].width = ancho
+
         st.markdown("#### 1. Descargar Plantilla Modelo")
-        st.download_button(label="📥 Descargar Plantilla Excel", data=output.getvalue(), file_name="Plantilla_Carga_Masiva.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(label="📥 Descargar Plantilla Excel", data=output.getvalue(), file_name="Plantilla_Carga_Masiva_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
         st.markdown("#### 2. Subir Archivo Completado")
         uploaded = st.file_uploader("Subir archivo Excel o CSV", type=["xlsx", "xls", "csv"])
