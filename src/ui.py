@@ -6,7 +6,7 @@ import io
 import os
 import time
 import base64
-import sqlite3
+import psycopg2
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -104,7 +104,6 @@ def aplicar_estilo_tema(nombre_tema):
     st.markdown(css, unsafe_allow_html=True)
 
 def calcular_semaforo_vencimiento(fecha_str, motivo):
-    """Calcula el nivel de alerta según los días restantes, incluyendo categoría de Vencido."""
     if motivo == "Alerta Sanitaria":
         return "🚨 ALERTA (ISP)"
     if not fecha_str or pd.isna(fecha_str): 
@@ -169,11 +168,13 @@ def generar_anexo_ii_docx(datos):
 
 def actualizar_bd_alertas(conn):
     cursor = conn.cursor()
-    columnas = ["alerta_numero TEXT", "alerta_fecha TEXT", "titular_registro TEXT", "registro_sanitario TEXT", "principio_activo TEXT", "archivo_canje TEXT", "nombre_archivo_canje TEXT"]
+    columnas = ["alerta_numero VARCHAR(255)", "alerta_fecha VARCHAR(255)", "titular_registro VARCHAR(255)", "registro_sanitario VARCHAR(255)", "principio_activo VARCHAR(255)", "archivo_canje TEXT", "nombre_archivo_canje TEXT"]
     for col in columnas:
-        try: cursor.execute(f"ALTER TABLE productos ADD COLUMN {col}")
-        except sqlite3.OperationalError: pass 
-    conn.commit()
+        try: 
+            cursor.execute(f"ALTER TABLE productos ADD COLUMN {col}")
+            conn.commit()
+        except Exception: 
+            conn.rollback() 
 
 def parche_arreglar_carga_masiva(conn):
     cursor = conn.cursor()
@@ -184,7 +185,7 @@ def parche_arreglar_carga_masiva(conn):
             motivo_informe = COALESCE(motivo_informe, 'Gestión pronto vencimiento')
         WHERE paso_actual = 1 OR estado_global IS NULL OR estado_global = ''
     """)
-    cursor.execute("UPDATE productos SET cantidad = 0 WHERE cantidad IS NULL OR cantidad = ''")
+    cursor.execute("UPDATE productos SET cantidad = 0 WHERE cantidad IS NULL")
     conn.commit()
 
 def render_ui(user_info: dict):
@@ -320,7 +321,7 @@ def render_ui(user_info: dict):
                         if not codigo or not descripcion or not lote or (es_modulo_alerta and not alerta_numero):
                             st.error("Complete todos los campos obligatorios (*)")
                         else:
-                            conn.cursor().execute("SELECT id FROM productos WHERE codigo_reyimen=? AND lote=? AND bodega_origen=? AND estado_global IN ('En trámite', 'CUARENTENA')", (codigo, lote, bodega))
+                            conn.cursor().execute("SELECT id FROM productos WHERE codigo_reyimen=%s AND lote=%s AND bodega_origen=%s AND estado_global IN ('En trámite', 'CUARENTENA')", (codigo, lote, bodega))
                             if conn.cursor().fetchone(): st.warning("⚠️ Este producto ya fue ingresado y está activo.")
                             else:
                                 estado_inicial = 'CUARENTENA' if es_modulo_alerta else 'En trámite'
@@ -330,7 +331,7 @@ def render_ui(user_info: dict):
                                 a_fec = str(alerta_fecha) if es_modulo_alerta else ""
                                 conn.cursor().execute("""
                                 INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual, estado_global, ubicacion_fisica, numero_bulto, alerta_numero, alerta_fecha)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                 """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario'], 2, estado_inicial, ub_fisica, bulto, a_num, a_fec))
                                 conn.commit()
                                 st.success("✅ Producto registrado."); time.sleep(1.5); st.rerun()
@@ -369,8 +370,14 @@ def render_ui(user_info: dict):
                         st.markdown("#### ⚙️ Edición de Registro Seleccionado")
                         id_mod = st.selectbox("Seleccione el registro a modificar:", opciones_id, format_func=lambda x: formato_opciones[x], key="sel_p1_e")
                         
-                        prod_data = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_mod,)).fetchone()
+                        cursor_mod = conn.cursor()
+                        cursor_mod.execute("SELECT * FROM productos WHERE id=%s", (id_mod,))
+                        prod_data = cursor_mod.fetchone()
+                        
                         if prod_data:
+                            column_names = [desc[0] for desc in cursor_mod.description]
+                            prod_data = dict(zip(column_names, prod_data))
+                            
                             with st.form("form_editar_p1"):
                                 c_e1, c_e2 = st.columns(2)
                                 idx_bodega = BODEGAS_OFICIALES.index(prod_data['bodega_origen']) if prod_data['bodega_origen'] in BODEGAS_OFICIALES else 0
@@ -393,10 +400,10 @@ def render_ui(user_info: dict):
                                 new_vencimiento = c_e2.date_input("Fecha de Vencimiento *", value=fecha_init, format="DD/MM/YYYY")
                                 b1, b2 = st.columns(2)
                                 if b1.form_submit_button("💾 Guardar Cambios"):
-                                    conn.cursor().execute("UPDATE productos SET bodega_origen=?, cantidad=?, lote=?, vencimiento=? WHERE id=?", (new_bodega, new_cantidad, new_lote, str(new_vencimiento), id_mod))
+                                    conn.cursor().execute("UPDATE productos SET bodega_origen=%s, cantidad=%s, lote=%s, vencimiento=%s WHERE id=%s", (new_bodega, new_cantidad, new_lote, str(new_vencimiento), id_mod))
                                     conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
                                 if b2.form_submit_button("🗑️ Eliminar Registro"):
-                                    conn.cursor().execute("DELETE FROM productos WHERE id=?", (id_mod,))
+                                    conn.cursor().execute("DELETE FROM productos WHERE id=%s", (id_mod,))
                                     conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
     # --- PASO 2 ---
@@ -407,7 +414,6 @@ def render_ui(user_info: dict):
         if df.empty: 
             st.info("No hay productos pendientes de canje comercial.")
         else:
-            hoy = datetime.now().date()
             df["Nivel Alerta"] = df.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
             df["Vencimiento"] = pd.to_datetime(df["Vencimiento"], errors='coerce').dt.strftime('%d/%m/%Y')
             columnas_orden = ["ID", "Nivel Alerta", "Código", "Descripción", "Bodega", "Compra", "Lote", "Cant", "Vencimiento"]
@@ -449,9 +455,9 @@ def render_ui(user_info: dict):
                             if archivo_adjunto is not None:
                                 archivo_b64 = base64.b64encode(archivo_adjunto.read()).decode()
                                 nombre_archivo = archivo_adjunto.name
-                                conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=?, archivo_canje=?, nombre_archivo_canje=? WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), siguiente_paso, archivo_b64, nombre_archivo, prod_id))
+                                conn.cursor().execute("UPDATE productos SET estado_canje=%s, observacion_paso2=%s, fecha_paso2=%s, paso_actual=%s, archivo_canje=%s, nombre_archivo_canje=%s WHERE id=%s", (aplica_canje, obs_jefatura, str(datetime.now().date()), siguiente_paso, archivo_b64, nombre_archivo, prod_id))
                             else:
-                                conn.cursor().execute("UPDATE productos SET estado_canje=?, observacion_paso2=?, fecha_paso2=?, paso_actual=? WHERE id=?", (aplica_canje, obs_jefatura, str(datetime.now().date()), siguiente_paso, prod_id))
+                                conn.cursor().execute("UPDATE productos SET estado_canje=%s, observacion_paso2=%s, fecha_paso2=%s, paso_actual=%s WHERE id=%s", (aplica_canje, obs_jefatura, str(datetime.now().date()), siguiente_paso, prod_id))
                             
                             conn.commit()
                             if siguiente_paso == 4:
@@ -503,17 +509,20 @@ def render_ui(user_info: dict):
                         obs_previa = df_filtrado.loc[df_filtrado['ID'] == prod_id, 'Obs_P2'].values[0]
                         if obs_previa: st.info(f"📝 **Instrucciones de Jefatura:** {obs_previa}")
                         
-                        prod_data_file = conn.cursor().execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=?", (prod_id,)).fetchone()
-                        if prod_data_file and prod_data_file['archivo_canje']:
+                        cursor_p3 = conn.cursor()
+                        cursor_p3.execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=%s", (prod_id,))
+                        prod_data_file = cursor_p3.fetchone()
+                        
+                        if prod_data_file and prod_data_file[0]:
                             st.info("📎 Jefatura ha adjuntado un documento de respaldo para este canje:")
-                            st.download_button("Descargar Respaldo de Jefatura", base64.b64decode(prod_data_file['archivo_canje']), file_name=prod_data_file['nombre_archivo_canje'])
+                            st.download_button("Descargar Respaldo de Jefatura", base64.b64decode(prod_data_file[0]), file_name=prod_data_file[1])
                         
                         with st.form("form_paso3_ingreso"):
                             proveedor, tipo_doc = st.selectbox("Proveedor *", PROVEEDORES_OFICIALES), st.selectbox("Tipo Doc *", TIPOS_DOCUMENTO)
                             num_doc, tramite = st.text_input("N° Documento / OC *"), st.selectbox("Estado del trámite *", ESTADOS_TRAMITE_PROVEEDOR)
                             obs = st.text_area("Observaciones del Área de Registro")
                             if st.form_submit_button("Avanzar a Paso 4"):
-                                conn.cursor().execute("UPDATE productos SET proveedor=?, tipo_documento=?, numero_documento_oc=?, tramite_proveedor=?, fecha_paso3=?, observacion_paso3=?, paso_actual=4 WHERE id=?", (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
+                                conn.cursor().execute("UPDATE productos SET proveedor=%s, tipo_documento=%s, numero_documento_oc=%s, tramite_proveedor=%s, fecha_paso3=%s, observacion_paso3=%s, paso_actual=4 WHERE id=%s", (proveedor, tipo_doc, num_doc, tramite, str(datetime.now().date()), obs, prod_id))
                                 conn.commit(); st.success("Avanzado."); time.sleep(1.5); st.rerun()
                     else:
                         st.info("🔒 **Modo de solo lectura:** Solo el área de Registro y Abastecimiento puede ingresar trámites comerciales.")
@@ -550,20 +559,29 @@ def render_ui(user_info: dict):
                         st.markdown("#### ⚙️ Actualización de Estado")
                         id_seg = st.selectbox("Seleccione el trámite a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3_s")
                         
-                        prod_seg_file = conn.cursor().execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=?", (id_seg,)).fetchone()
-                        if prod_seg_file and prod_seg_file['archivo_canje']:
+                        cursor_p3_seg = conn.cursor()
+                        cursor_p3_seg.execute("SELECT archivo_canje, nombre_archivo_canje FROM productos WHERE id=%s", (id_seg,))
+                        prod_seg_file = cursor_p3_seg.fetchone()
+                        
+                        if prod_seg_file and prod_seg_file[0]:
                             st.info("📎 Jefatura ha adjuntado un documento de respaldo para este canje:")
-                            st.download_button("Descargar Respaldo de Jefatura", base64.b64decode(prod_seg_file['archivo_canje']), file_name=prod_seg_file['nombre_archivo_canje'], key="dl_seg_p3")
+                            st.download_button("Descargar Respaldo de Jefatura", base64.b64decode(prod_seg_file[0]), file_name=prod_seg_file[1], key="dl_seg_p3")
 
-                        prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
+                        cursor_p3_upd = conn.cursor()
+                        cursor_p3_upd.execute("SELECT * FROM productos WHERE id=%s", (id_seg,))
+                        prod_seg = cursor_p3_upd.fetchone()
+                        
                         if prod_seg:
+                            col_names = [desc[0] for desc in cursor_p3_upd.description]
+                            prod_seg = dict(zip(col_names, prod_seg))
+                            
                             with st.form("form_paso3_actualizar"):
                                 u_prov = st.selectbox("Proveedor", PROVEEDORES_OFICIALES, index=PROVEEDORES_OFICIALES.index(prod_seg['proveedor']) if prod_seg['proveedor'] in PROVEEDORES_OFICIALES else 0)
                                 u_doc = st.text_input("N° Doc", value=prod_seg['numero_documento_oc'] or "")
                                 u_tram = st.selectbox("Estado", ESTADOS_TRAMITE_PROVEEDOR, index=ESTADOS_TRAMITE_PROVEEDOR.index(prod_seg['tramite_proveedor']) if prod_seg['tramite_proveedor'] in ESTADOS_TRAMITE_PROVEEDOR else 0)
                                 u_obs = st.text_area("Obs.", value=prod_seg['observacion_paso3'] or "")
                                 if st.form_submit_button("Guardar Cambios"):
-                                    conn.cursor().execute("UPDATE productos SET proveedor=?, numero_documento_oc=?, tramite_proveedor=?, observacion_paso3=? WHERE id=?", (u_prov, u_doc, u_tram, u_obs, id_seg))
+                                    conn.cursor().execute("UPDATE productos SET proveedor=%s, numero_documento_oc=%s, tramite_proveedor=%s, observacion_paso3=%s WHERE id=%s", (u_prov, u_doc, u_tram, u_obs, id_seg))
                                     conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
 
     # --- PASO 4 ---
@@ -607,7 +625,7 @@ def render_ui(user_info: dict):
                             ub_fisica, ub_comp = st.selectbox("Ubicación Física *", OPCIONES_FISICA_P4), st.selectbox("Ubicación Computacional *", BODEGAS_PASO4)
                             bulto, obs = st.text_input("N° Bulto *"), st.text_area("Observaciones Paso 4")
                             if st.form_submit_button("Avanzar a Paso 5"):
-                                conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=?, paso_actual=5 WHERE id=?", (ub_fisica, ub_comp, bulto, obs, prod_id))
+                                conn.cursor().execute("UPDATE productos SET ubicacion_fisica=%s, ubicacion_computacional=%s, numero_bulto=%s, observacion_paso4=%s, paso_actual=5 WHERE id=%s", (ub_fisica, ub_comp, bulto, obs, prod_id))
                                 conn.commit(); st.success("Avanzado a Paso 5."); time.sleep(1); st.rerun()
                     else:
                         st.info("🔒 **Modo de solo lectura:** Solo el área de Bodega tiene permisos para asignar ubicaciones físicas y computacionales.")
@@ -644,8 +662,14 @@ def render_ui(user_info: dict):
                         st.markdown("#### ⚙️ Modificación de Bulto Existente")
                         id_seg4 = st.selectbox("Seleccione el bulto a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p4_s")
                         
-                        prod_seg4 = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg4,)).fetchone()
+                        cursor_p4 = conn.cursor()
+                        cursor_p4.execute("SELECT * FROM productos WHERE id=%s", (id_seg4,))
+                        prod_seg4 = cursor_p4.fetchone()
+                        
                         if prod_seg4:
+                            col_names = [desc[0] for desc in cursor_p4.description]
+                            prod_seg4 = dict(zip(col_names, prod_seg4))
+                            
                             with st.form("form_p4_actualizar"):
                                 idx_fis = OPCIONES_FISICA_P4.index(prod_seg4['ubicacion_fisica']) if prod_seg4['ubicacion_fisica'] in OPCIONES_FISICA_P4 else 0
                                 idx_comp = BODEGAS_PASO4.index(prod_seg4['ubicacion_computacional']) if prod_seg4['ubicacion_computacional'] in BODEGAS_PASO4 else 0
@@ -656,7 +680,7 @@ def render_ui(user_info: dict):
                                 u_obs4 = st.text_area("Observaciones", value=prod_seg4['observacion_paso4'] or "")
                                 
                                 if st.form_submit_button("Actualizar Bulto"):
-                                    conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
+                                    conn.cursor().execute("UPDATE productos SET ubicacion_fisica=%s, ubicacion_computacional=%s, numero_bulto=%s, observacion_paso4=%s WHERE id=%s", (u_fisica, u_comp, u_bulto, u_obs4, id_seg4))
                                     conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
 
     # --- PASO 5 ---
@@ -706,7 +730,7 @@ def render_ui(user_info: dict):
                             ])
                             obs = st.text_area("Resolución / Comentarios finales")
                             if st.form_submit_button("Finalizar y Archivar"):
-                                conn.cursor().execute("UPDATE productos SET resolucion_numero=?, estado_final=?, observacion_paso5=?, estado_global='Concluido' WHERE id=?", (num_res, estado_fin, obs, prod_id))
+                                conn.cursor().execute("UPDATE productos SET resolucion_numero=%s, estado_final=%s, observacion_paso5=%s, estado_global='Concluido' WHERE id=%s", (num_res, estado_fin, obs, prod_id))
                                 conn.commit(); st.success("Archivado."); time.sleep(1.5); st.rerun()
                     else:
                         st.info("🔒 **Modo de solo lectura:** Solo Jefatura puede aplicar el cierre definitivo de los trámites.")
@@ -744,8 +768,14 @@ def render_ui(user_info: dict):
                         st.markdown("#### ⚙️ Cierre Definitivo (Sin Canje)")
                         id_sc = st.selectbox("Seleccione el producto para CERRAR:", opciones_id_sc, format_func=lambda x: formato_opciones_sc[x], key="sel_p5_sc")
                         
-                        prod_sc = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_sc,)).fetchone()
+                        cursor_sc = conn.cursor()
+                        cursor_sc.execute("SELECT * FROM productos WHERE id=%s", (id_sc,))
+                        prod_sc = cursor_sc.fetchone()
+                        
                         if prod_sc:
+                            col_names = [desc[0] for desc in cursor_sc.description]
+                            prod_sc = dict(zip(col_names, prod_sc))
+                            
                             with st.form("form_paso5_sin_canje"):
                                 st.markdown("<p style='color: #475569; font-size: 14px; font-weight: 600; margin-bottom: 0;'>Opciones de Gestión de Red (Opcional)</p>", unsafe_allow_html=True)
                                 c1, c2 = st.columns(2)
@@ -760,7 +790,7 @@ def render_ui(user_info: dict):
                                 obs_sc = st.text_area("Resolución / Comentarios finales", value=prod_sc['observacion_paso5'] or "", label_visibility="collapsed")
                                 
                                 if st.form_submit_button("Finalizar y Archivar"):
-                                    conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=?, observacion_paso2=?, observacion_paso5=?, resolucion_numero=?, estado_final=?, estado_global='Concluido' WHERE id=?", (difusion_sel, redistribucion_sel, obs_sc, num_res_sc, estado_fin_sc, id_sc))
+                                    conn.cursor().execute("UPDATE productos SET tipo_gestion_canje=%s, observacion_paso2=%s, observacion_paso5=%s, resolucion_numero=%s, estado_final=%s, estado_global='Concluido' WHERE id=%s", (difusion_sel, redistribucion_sel, obs_sc, num_res_sc, estado_fin_sc, id_sc))
                                     conn.commit(); st.success("Archivado con éxito."); time.sleep(1.5); st.rerun()
 
     # --- ALERTAS, CARGA MASIVA Y ADMIN ---
@@ -775,8 +805,15 @@ def render_ui(user_info: dict):
             
             if rol in ["admin", "jefatura_admin", "jefatura"]:
                 id_alerta = st.selectbox("Seleccione Alerta a gestionar", df_alertas['ID'].tolist())
-                prod_alerta = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_alerta,)).fetchone()
+                
+                cursor_alerta = conn.cursor()
+                cursor_alerta.execute("SELECT * FROM productos WHERE id=%s", (id_alerta,))
+                prod_alerta = cursor_alerta.fetchone()
+                
                 if prod_alerta:
+                    col_names = [desc[0] for desc in cursor_alerta.description]
+                    prod_alerta = dict(zip(col_names, prod_alerta))
+                    
                     st.markdown(f"#### 📝 Redacción de Anexo II: **{prod_alerta['descripcion']}**")
                     with st.form("form_anexo_ii"):
                         col1, col2 = st.columns(2)
@@ -788,14 +825,14 @@ def render_ui(user_info: dict):
                         dir_tecnico = col2.text_input("Director Técnico / QF Responsable", value=user_info['nombre_completo'])
                         obs_alerta = st.text_area("Otras Observaciones", value=prod_alerta['observacion_paso2'] or "")
                         if st.form_submit_button("💾 Guardar Datos para Anexo II"):
-                            conn.cursor().execute("UPDATE productos SET principio_activo=?, titular_registro=?, registro_sanitario=?, proveedor=?, observacion_paso2=? WHERE id=?", (principio_activo, titular, reg_sanitario, proveedor, obs_alerta, id_alerta))
+                            conn.cursor().execute("UPDATE productos SET principio_activo=%s, titular_registro=%s, registro_sanitario=%s, proveedor=%s, observacion_paso2=%s WHERE id=%s", (principio_activo, titular, reg_sanitario, proveedor, obs_alerta, id_alerta))
                             conn.commit(); st.success("Datos guardados."); time.sleep(1); st.rerun()
                     
                     if prod_alerta['titular_registro'] and prod_alerta['registro_sanitario']:
                         datos_docx = { "descripcion": prod_alerta['descripcion'], "principio_activo": prod_alerta['principio_activo'], "titular": prod_alerta['titular_registro'], "registro_sanitario": prod_alerta['registro_sanitario'], "lote": prod_alerta['lote'], "representante_legal": "Representante Hospital", "director_tecnico": user_info['nombre_completo'], "proveedor": prod_alerta['proveedor'], "cantidad": prod_alerta['cantidad'], "unidad": prod_alerta['unidad'], "observaciones": prod_alerta['observacion_paso2'] }
                         st.download_button("📄 Descargar Documento Anexo II (.docx)", data=generar_anexo_ii_docx(datos_docx), file_name=f"ANEXO_II_{prod_alerta['lote']}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                         if st.button("✅ Marcar como 'Notificado al Proveedor' y Enviar a Bulto"):
-                            conn.cursor().execute("UPDATE productos SET estado_global='Alerta Notificada al Proveedor', paso_actual=3 WHERE id=?", (id_alerta,))
+                            conn.cursor().execute("UPDATE productos SET estado_global='Alerta Notificada al Proveedor', paso_actual=3 WHERE id=%s", (id_alerta,))
                             conn.commit(); st.success("Avanzado al Paso 3."); time.sleep(1.5); st.rerun()
             else:
                 st.info("🔒 **Modo de solo lectura:** Solo Jefatura puede completar y generar el Anexo II.")
@@ -837,7 +874,7 @@ def render_ui(user_info: dict):
                             bulto = st.text_input("N° Bulto *")
                             obs = st.text_area("Observaciones Finales (Opcional)")
                             if st.form_submit_button("Guardar Ubicación y Finalizar Alerta"):
-                                conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=?, paso_actual=4, estado_global='Concluido', estado_final='Retirado por Alerta Sanitaria' WHERE id=?", (ub_fisica, ub_comp, bulto, obs, prod_id))
+                                conn.cursor().execute("UPDATE productos SET ubicacion_fisica=%s, ubicacion_computacional=%s, numero_bulto=%s, observacion_paso4=%s, paso_actual=4, estado_global='Concluido', estado_final='Retirado por Alerta Sanitaria' WHERE id=%s", (ub_fisica, ub_comp, bulto, obs, prod_id))
                                 conn.commit(); st.success("Alerta Sanitaria finalizada y archivada."); time.sleep(1.5); st.rerun()
                     else:
                         st.info("🔒 **Modo de solo lectura:** Solo Bodega puede ubicar y finalizar los bultos de Alertas Sanitarias.")
@@ -870,8 +907,14 @@ def render_ui(user_info: dict):
                         st.markdown("#### ⚙️ Modificación de Bulto Existente")
                         id_seg = st.selectbox("Seleccione el bulto a actualizar:", opciones_id_seg, format_func=lambda x: formato_opciones_seg[x], key="sel_p3a_s")
                         
-                        prod_seg = conn.cursor().execute("SELECT * FROM productos WHERE id=?", (id_seg,)).fetchone()
+                        cursor_p3a = conn.cursor()
+                        cursor_p3a.execute("SELECT * FROM productos WHERE id=%s", (id_seg,))
+                        prod_seg = cursor_p3a.fetchone()
+                        
                         if prod_seg:
+                            col_names = [desc[0] for desc in cursor_p3a.description]
+                            prod_seg = dict(zip(col_names, prod_seg))
+                            
                             with st.form("form_p3a_actualizar"):
                                 idx_fis = OPCIONES_FISICA_P4.index(prod_seg['ubicacion_fisica']) if prod_seg['ubicacion_fisica'] in OPCIONES_FISICA_P4 else 0
                                 idx_comp = BODEGAS_PASO4.index(prod_seg['ubicacion_computacional']) if prod_seg['ubicacion_computacional'] in BODEGAS_PASO4 else 0
@@ -882,14 +925,14 @@ def render_ui(user_info: dict):
                                 u_obs = st.text_area("Observaciones", value=prod_seg['observacion_paso4'] or "")
                                 
                                 if st.form_submit_button("Actualizar Bulto"):
-                                    conn.cursor().execute("UPDATE productos SET ubicacion_fisica=?, ubicacion_computacional=?, numero_bulto=?, observacion_paso4=? WHERE id=?", (u_fisica, u_comp, u_bulto, u_obs, id_seg))
+                                    conn.cursor().execute("UPDATE productos SET ubicacion_fisica=%s, ubicacion_computacional=%s, numero_bulto=%s, observacion_paso4=%s WHERE id=%s", (u_fisica, u_comp, u_bulto, u_obs, id_seg))
                                     conn.commit(); st.success("Ubicación actualizada."); time.sleep(1); st.rerun()
 
     # --- CARGA MASIVA Y REPORTES ---
     elif tab_seleccionada == "📤 Carga Masiva":
         st.markdown("## 📤 Carga Masiva de Productos")
         
-        df_plantilla = pd.DataFrame([{"BODEGA ORIGEN": "Bodega AZ09 (Fármacos)", "TIPO PRODUCTO": "Fármaco", "CÓDIGO REYIMEN": "1365", "DESCRIPCIÓN": "BUPIVACAINA", "TIPO COMPRA": "CENABAST", "UNIDAD": "FRASCO", "CANTIDAD": 100, "FECHA VENCIMIENTO": "2026-10-31", "LOTE": "L12345"}])
+        df_plantilla = pd.DataFrame([{"BODEGA ORIGEN": "Bodega AZ09 (Fármacos)", "TIPO PRODUCTO": "Fármaco", "CÓDIGO REYIMEN": "1365", "DESCRIPCIÓN": "BUPIVACAINA", "TIPO COMPRA": "CENABAST", "UNIDAD": "FRASCO", "CANTIDAD": 100, "FECHA VENCIMIENTO": "31/10/2026", "LOTE": "L12345"}])
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_plantilla.to_excel(writer, index=False, sheet_name='Plantilla_Carga')
@@ -915,7 +958,7 @@ def render_ui(user_info: dict):
         st.download_button(label="📥 Descargar Plantilla Excel", data=output.getvalue(), file_name="Plantilla_Carga_Masiva_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
         st.markdown("#### 2. Subir Archivo Completado")
-        uploaded = st.file_uploader("Subir archivo Excel o CSV", type=["xlsx", "xls", "csv"])
+        uploaded = st.file_uploader("Subir archivo Excel o CSV (Asegúrate de usar formato DD/MM/YYYY)", type=["xlsx", "xls", "csv"])
         if uploaded and st.button("🚀 Procesar e Ingresar Productos"):
             ok, msg = procesar_carga_masiva(uploaded, user_info['usuario'])
             if ok: st.success(msg); time.sleep(1.5); st.rerun()
@@ -951,7 +994,7 @@ def render_ui(user_info: dict):
             st.download_button(
                 label="📥 Descargar Reporte Completo en Excel",
                 data=output.getvalue(),
-                file_name=f"Reporte_Vencimientos_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                file_name=f"Reporte_Vencimientos_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1007,12 +1050,19 @@ def render_ui(user_info: dict):
         tab_crear, tab_editar = st.tabs(["➕ Crear Usuario", "✏️ Editar / Eliminar"])
         with tab_crear:
             with st.form("form_nuevo_usuario"):
-                u_user, u_pass = st.text_input("Usuario"), st.text_input("Contraseña", type="password")
-                u_nombre, u_rol = st.text_input("Nombre"), st.selectbox("Rol", ["admin", "jefatura_admin", "jefatura", "registro", "bodega"])
+                u_user, u_pass = st.text_input("Usuario *"), st.text_input("Contraseña *", type="password")
+                u_nombre, u_rol = st.text_input("Nombre *"), st.selectbox("Rol", ["admin", "jefatura_admin", "jefatura", "registro", "bodega"])
                 if st.form_submit_button("Crear"):
-                    conn.cursor().execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (?, ?, ?, ?)", (u_user, u_pass, u_rol, u_nombre))
-                    conn.commit()
-                    st.success("Usuario creado."); time.sleep(1); st.rerun()
+                    if not u_user or not u_pass or not u_nombre:
+                        st.error("⚠️ Todos los campos con asterisco (*) son obligatorios.")
+                    else:
+                        try:
+                            conn.cursor().execute("INSERT INTO usuarios (usuario, password, rol, nombre_completo) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_rol, u_nombre))
+                            conn.commit()
+                            st.success("Usuario creado exitosamente."); time.sleep(1); st.rerun()
+                        except psycopg2.IntegrityError:
+                            st.error(f"⚠️ El nombre de usuario '{u_user}' ya está en uso. Por favor, elige otro distinto (ej: {u_user}2).")
+                            conn.rollback()
             st.dataframe(pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn), hide_index=True, use_container_width=True, height=180)
         with tab_editar:
             df_users_edit = pd.read_sql_query("SELECT id, usuario, rol, nombre_completo, estado FROM usuarios", conn)
@@ -1026,8 +1076,14 @@ def render_ui(user_info: dict):
                 st.markdown("#### ⚙️ Editar o Eliminar Usuario")
                 id_mod = st.selectbox("Seleccione el usuario a Modificar/Eliminar:", opciones_user_id, format_func=lambda x: formato_opciones_user[x])
                 
-                user_data = conn.cursor().execute("SELECT * FROM usuarios WHERE id=?", (id_mod,)).fetchone()
+                cursor_usr = conn.cursor()
+                cursor_usr.execute("SELECT * FROM usuarios WHERE id=%s", (id_mod,))
+                user_data = cursor_usr.fetchone()
+                
                 if user_data:
+                    col_names = [desc[0] for desc in cursor_usr.description]
+                    user_data = dict(zip(col_names, user_data))
+                    
                     with st.form("form_editar_usuario"):
                         new_u_nombre, new_u_user = st.text_input("Nombre", value=user_data['nombre_completo']), st.text_input("Usuario", value=user_data['usuario'])
                         
@@ -1038,11 +1094,11 @@ def render_ui(user_info: dict):
                         new_u_pass = st.text_input("Nueva Contraseña (Opcional)", type="password")
                         b1, b2 = st.columns(2)
                         if b1.form_submit_button("Guardar Cambios"):
-                            if new_u_pass.strip(): conn.cursor().execute("UPDATE usuarios SET usuario=?, password=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_pass, new_u_rol, new_u_nombre, new_u_estado, id_mod))
-                            else: conn.cursor().execute("UPDATE usuarios SET usuario=?, rol=?, nombre_completo=?, estado=? WHERE id=?", (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            if new_u_pass.strip(): conn.cursor().execute("UPDATE usuarios SET usuario=%s, password=%s, rol=%s, nombre_completo=%s, estado=%s WHERE id=%s", (new_u_user, new_u_pass, new_u_rol, new_u_nombre, new_u_estado, id_mod))
+                            else: conn.cursor().execute("UPDATE usuarios SET usuario=%s, rol=%s, nombre_completo=%s, estado=%s WHERE id=%s", (new_u_user, new_u_rol, new_u_nombre, new_u_estado, id_mod))
                             conn.commit(); st.success("Actualizado."); time.sleep(1); st.rerun()
                         if b2.form_submit_button("Eliminar Usuario"):
-                            conn.cursor().execute("DELETE FROM usuarios WHERE id=?", (id_mod,))
+                            conn.cursor().execute("DELETE FROM usuarios WHERE id=%s", (id_mod,))
                             conn.commit(); st.warning("Eliminado."); time.sleep(1); st.rerun()
 
     conn.close()
