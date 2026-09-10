@@ -81,15 +81,15 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="stMetricValue"] {{ color: {tema['text']} !important; }}
         .stMarkdown p {{ margin-bottom: 0 !important; }}
         code {{ background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important; font-weight: bold !important; padding: 2px 8px !important; border-radius: 4px !important; }}
-        [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {{ opacity: 1 !important; background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important; box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important; color: #0f172a !important; transition: all 0.3s ease; z-index: 999999 !important; }}
-        [data-testid="collapsedControl"]:hover, [data-testid="stSidebarCollapsedControl"]:hover {{ background-color: #f1f5f9 !important; border-color: #94a3b8 !important; }}
-        [data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg {{ fill: #0f172a !important; color: #0f172a !important; }}
-        div[data-baseweb="select"] > div, .stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"], div[data-baseweb="popover"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
-        div[data-baseweb="select"] * {{ color: #0f172a !important; }}
-        .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #ffffff !important; color: #0f172a !important; }}
+        
+        /* Proteccion contra modo oscuro en cajas de texto y menus */
+        div[data-baseweb="select"] > div, .stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"], div[data-baseweb="popover"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; color: #0f172a !important; }}
+        div[data-baseweb="select"] * {{ color: #0f172a !important; background-color: transparent !important; }}
+        .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #ffffff !important; color: #0f172a !important; -webkit-text-fill-color: #0f172a !important; }}
         ul[data-testid="stSelectboxVirtualDropdown"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; }}
         ul[data-testid="stSelectboxVirtualDropdown"] li {{ background-color: #ffffff !important; color: #0f172a !important; }}
         ul[data-testid="stSelectboxVirtualDropdown"] li:hover {{ background-color: #e2e8f0 !important; color: #0f172a !important; }}
+        
         .stButton button, .stDownloadButton button, [data-testid="stFileUploader"] button {{ background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; font-weight: bold !important; box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; }}
         .stButton button *, .stDownloadButton button *, [data-testid="stFileUploader"] button * {{ color: #0f172a !important; }}
         div[data-testid="stForm"] button {{ background-color: #0284c7 !important; border: 1px solid #0369a1 !important; }}
@@ -97,8 +97,10 @@ def aplicar_estilo_tema(nombre_tema):
         div[data-testid="stForm"] button:hover {{ background-color: #0369a1 !important; }}
         [data-testid="stFileUploader"] section {{ background-color: #ffffff !important; border: 2px dashed #cbd5e1 !important; }}
         [data-testid="stFileUploader"] section * {{ color: #334155 !important; }}
+        
+        /* Ajuste de Logo Inteligente */
         [data-testid="stSidebar"] [data-testid="stImage"] {{ display: flex !important; justify-content: center !important; margin-top: -15px !important; margin-bottom: 20px !important; background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }}
-        [data-testid="stSidebar"] [data-testid="stImage"] img {{ display: block !important; margin: 0 auto !important; image-rendering: high-quality !important; -webkit-font-smoothing: antialiased !important; mix-blend-mode: multiply !important; }}
+        [data-testid="stSidebar"] [data-testid="stImage"] img {{ display: block !important; margin: 0 auto !important; width: 100% !important; max-width: 160px !important; height: auto !important; object-fit: contain !important; mix-blend-mode: multiply !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -228,8 +230,8 @@ def render_ui(user_info: dict):
     st.markdown(f"<hr style='margin-top: 0.5rem; margin-bottom: 1rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
 
     path1, path2 = "assets/hospital-penco-lirquen.png", "assets/logo.png"
-    if os.path.exists(path1): st.sidebar.image(path1, width=120)
-    elif os.path.exists(path2): st.sidebar.image(path2, width=120)
+    if os.path.exists(path1): st.sidebar.image(path1, use_container_width=True)
+    elif os.path.exists(path2): st.sidebar.image(path2, use_container_width=True)
 
     rol = user_info['rol']
     
