@@ -9,43 +9,46 @@ def procesar_carga_masiva(file, usuario_registro):
         else:
             df = pd.read_excel(file)
 
+        # Blindaje 1: Estandarizar títulos (quitar espacios extra y poner todo en mayúsculas)
+        df.columns = df.columns.str.strip().str.upper()
+
         conn = get_connection()
         cursor = conn.cursor()
         count = 0
 
         for index, row in df.iterrows():
-            # Extraer datos de las columnas asegurando que sean texto o números válidos
+            # Blindaje 2: Búsqueda flexible (con o sin tildes)
+            codigo = str(row.get('CÓDIGO REYIMEN', row.get('CODIGO REYIMEN', ''))).strip()
+
+            # Evitar procesar filas que estén completamente en blanco
+            if not codigo or codigo.lower() == 'nan' or codigo.lower() == 'nat':
+                continue
+
             bodega = str(row.get('BODEGA ORIGEN', '')).strip()
             tipo_prod = str(row.get('TIPO PRODUCTO', '')).strip()
-            codigo = str(row.get('CÓDIGO REYIMEN', '')).strip()
-            desc = str(row.get('DESCRIPCIÓN', '')).strip()
+            desc = str(row.get('DESCRIPCIÓN', row.get('DESCRIPCION', ''))).strip()
             compra = str(row.get('TIPO COMPRA', '')).strip()
             unidad = str(row.get('UNIDAD', '')).strip()
             cant = row.get('CANTIDAD', 0)
             venc = row.get('FECHA VENCIMIENTO', '')
             lote = str(row.get('LOTE', '')).strip()
 
-            # Evitar procesar filas que estén completamente en blanco
-            if not codigo or codigo == 'nan':
-                continue
-
-            # Blindaje para cantidades vacías
-            if pd.isna(cant) or str(cant).strip() == '':
-                cant = 0.0
-            else:
+            # Forzar cantidad a número
+            try:
                 cant = float(cant)
+            except:
+                cant = 0.0
             
-            # Blindaje y conversión de fecha para que la BD pueda calcular el semáforo (YYYY-MM-DD)
+            # Forzar fecha al formato correcto (YYYY-MM-DD)
             if pd.isna(venc) or str(venc).strip() == '':
                 venc_str = ''
             else:
                 try:
-                    # Convierte desde DD/MM/YYYY del Excel al formato interno de la BD
                     venc_str = pd.to_datetime(venc, dayfirst=True).strftime('%Y-%m-%d')
                 except:
                     venc_str = str(venc).strip()[:10]
 
-            # Inyección en PostgreSQL usando %s (El nuevo idioma de la nube)
+            # Inyección segura a PostgreSQL
             cursor.execute("""
                 INSERT INTO productos (
                     bodega_origen, tipo_producto, codigo_reyimen, descripcion, 
@@ -61,7 +64,12 @@ def procesar_carga_masiva(file, usuario_registro):
 
         conn.commit()
         conn.close()
-        return True, f"✅ Carga masiva exitosa: {count} productos ingresados directamente al Paso 2."
+
+        # Blindaje 3: Alerta clara si leyó el Excel pero no encontró datos
+        if count == 0:
+            return False, "⚠️ El archivo fue leído, pero se encontraron 0 productos. Asegúrate de usar la plantilla oficial y no alterar los títulos."
+
+        return True, f"✅ Carga masiva exitosa: {count} productos ingresados correctamente al Paso 2."
         
     except Exception as e:
-        return False, f"Error al procesar el archivo: {e}"
+        return False, f"❌ Error interno al procesar el archivo: {e}"
