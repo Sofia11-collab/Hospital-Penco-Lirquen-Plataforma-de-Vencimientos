@@ -98,9 +98,10 @@ def aplicar_estilo_tema(nombre_tema):
         [data-testid="stFileUploader"] section {{ background-color: #ffffff !important; border: 2px dashed #cbd5e1 !important; }}
         [data-testid="stFileUploader"] section * {{ color: #334155 !important; }}
         
-        /* Ajuste de Logo Inteligente */
-        [data-testid="stSidebar"] [data-testid="stImage"] {{ display: flex !important; justify-content: center !important; margin-top: -15px !important; margin-bottom: 20px !important; background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }}
-        [data-testid="stSidebar"] [data-testid="stImage"] img {{ display: block !important; margin: 0 auto !important; width: 100% !important; max-width: 160px !important; height: auto !important; object-fit: contain !important; mix-blend-mode: multiply !important; }}
+        /* Ajuste de Logo Centrado Perfecto */
+        [data-testid="stSidebar"] [data-testid="stImage"] {{ display: flex !important; justify-content: center !important; width: 100% !important; margin-top: -15px !important; margin-bottom: 20px !important; background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }}
+        [data-testid="stSidebar"] [data-testid="stImage"] > div {{ display: flex !important; justify-content: center !important; width: 100% !important; }}
+        [data-testid="stSidebar"] [data-testid="stImage"] img {{ margin: 0 auto !important; display: block !important; max-width: 170px !important; width: 100% !important; height: auto !important; object-fit: contain !important; mix-blend-mode: multiply !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -229,9 +230,13 @@ def render_ui(user_info: dict):
     borde_color = TEMAS_COLOR_CLAROS[tema_actual]["border"]
     st.markdown(f"<hr style='margin-top: 0.5rem; margin-bottom: 1rem; border: none; border-top: 1px solid {borde_color};' />", unsafe_allow_html=True)
 
+    # Inserción del logo centrada usando columnas
     path1, path2 = "assets/hospital-penco-lirquen.png", "assets/logo.png"
-    if os.path.exists(path1): st.sidebar.image(path1, use_container_width=True)
-    elif os.path.exists(path2): st.sidebar.image(path2, use_container_width=True)
+    img_path = path1 if os.path.exists(path1) else (path2 if os.path.exists(path2) else None)
+    if img_path:
+        _, col_logo, _ = st.sidebar.columns([1, 6, 1])
+        with col_logo:
+            st.image(img_path, use_container_width=True)
 
     rol = user_info['rol']
     
