@@ -346,7 +346,7 @@ def render_ui(user_info: dict):
                 st.info("🔒 **Modo de solo lectura:** Solo los usuarios con rol de Bodega pueden ingresar nuevos registros al sistema.")
 
         with tab_p1_editar:
-            df_p1 = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, lote AS Lote, cantidad AS Cant, vencimiento AS Vencimiento, motivo_informe AS Motivo, estado_global AS Estado FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'", conn)
+            df_p1 = pd.read_sql_query("""SELECT id AS "ID", bodega_origen AS "Bodega", codigo_reyimen AS "Código", descripcion AS "Descripción", lote AS "Lote", cantidad AS "Cant", vencimiento AS "Vencimiento", motivo_informe AS "Motivo", estado_global AS "Estado" FROM productos WHERE paso_actual IN (1, 2) OR estado_global = 'CUARENTENA'""", conn)
             
             if df_p1.empty: 
                 st.info("No hay registros modificables.")
@@ -416,7 +416,7 @@ def render_ui(user_info: dict):
     # --- PASO 2 ---
     elif tab_seleccionada == "⚖️ 2. Canjes (Jefatura)":
         st.markdown("## ⚖️ Paso 2 — Gestión de Canjes")
-        df = pd.read_sql_query("SELECT id AS ID, bodega_origen AS Bodega, codigo_reyimen AS Código, descripcion AS Descripción, tipo_documento AS Compra, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+        df = pd.read_sql_query("""SELECT id AS "ID", bodega_origen AS "Bodega", codigo_reyimen AS "Código", descripcion AS "Descripción", tipo_documento AS "Compra", cantidad AS "Cant", lote AS "Lote", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE paso_actual = 2 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'""", conn)
         
         if df.empty: 
             st.info("No hay productos pendientes de canje comercial.")
@@ -482,7 +482,7 @@ def render_ui(user_info: dict):
         tab_p3_nuevo, tab_p3_seguimiento = st.tabs(["➕ Pendientes de Ingreso", "🔄 Seguimiento de Trámites"])
         
         with tab_p3_nuevo:
-            df_p3_nuevo = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo, estado_canje AS Canje, observacion_paso2 AS Obs_P2 FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'", conn)
+            df_p3_nuevo = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", vencimiento AS "Vencimiento", motivo_informe AS "Motivo", estado_canje AS "Canje", observacion_paso2 AS "Obs_P2" FROM productos WHERE paso_actual = 3 AND estado_global = 'En trámite'""", conn)
             
             if df_p3_nuevo.empty: 
                 st.info("No hay nuevos productos.")
@@ -535,7 +535,7 @@ def render_ui(user_info: dict):
                         st.info("🔒 **Modo de solo lectura:** Solo el área de Registro y Abastecimiento puede ingresar trámites comerciales.")
 
         with tab_p3_seguimiento:
-            df_p3_seg = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, vencimiento AS Vencimiento, motivo_informe AS Motivo, proveedor AS Proveedor, tramite_proveedor AS Trámite, numero_documento_oc AS Doc FROM productos WHERE paso_actual >= 3 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            df_p3_seg = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", vencimiento AS "Vencimiento", motivo_informe AS "Motivo", proveedor AS "Proveedor", tramite_proveedor AS "Trámite", numero_documento_oc AS "Doc" FROM productos WHERE paso_actual >= 3 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'""", conn)
             
             if df_p3_seg.empty: 
                 st.info("No hay trámites en seguimiento.")
@@ -597,7 +597,7 @@ def render_ui(user_info: dict):
         tab_p4_nuevo, tab_p4_seg = st.tabs(["➕ Asignar Nueva Ubicación", "🔄 Seguimiento de Bultos"])
         
         with tab_p4_nuevo:
-            df = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, proveedor AS Proveedor, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            df = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", proveedor AS "Proveedor", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE paso_actual = 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'""", conn)
             
             if df.empty: 
                 st.info("No hay productos pendientes de asignación de bulto.")
@@ -638,7 +638,7 @@ def render_ui(user_info: dict):
                         st.info("🔒 **Modo de solo lectura:** Solo el área de Bodega tiene permisos para asignar ubicaciones físicas y computacionales.")
                         
         with tab_p4_seg:
-            df_seg4 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, ubicacion_fisica AS Física, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual >= 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            df_seg4 = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", ubicacion_fisica AS "Física", numero_bulto AS "Bulto", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE paso_actual >= 4 AND estado_global = 'En trámite' AND motivo_informe != 'Alerta Sanitaria'""", conn)
             
             if df_seg4.empty: 
                 st.info("No hay bultos activos en seguimiento.")
@@ -697,7 +697,7 @@ def render_ui(user_info: dict):
         
         with tab_p5_cierre:
             # Solo productos CON canje ("Aplica")
-            df_p5 = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, proveedor AS Proveedor, numero_bulto AS Bulto, estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'", conn)
+            df_p5 = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", proveedor AS "Proveedor", numero_bulto AS "Bulto", estado_global AS "Estado", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND estado_canje = 'Aplica' AND motivo_informe != 'Alerta Sanitaria'""", conn)
             
             if df_p5.empty: 
                 st.info("No hay productos con canje pendientes de cierre.")
@@ -744,7 +744,7 @@ def render_ui(user_info: dict):
                             
         with tab_p5_sin_canje:
             # Solo productos SIN canje ("No aplica" o compras propias)
-            df_p5_sc = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, estado_canje AS Canje, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'", conn)
+            df_p5_sc = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", estado_canje AS "Canje", numero_bulto AS "Bulto", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE paso_actual = 5 AND estado_global != 'Concluido' AND (estado_canje = 'No aplica' OR estado_canje IS NULL OR estado_canje != 'Aplica') AND motivo_informe != 'Alerta Sanitaria'""", conn)
             
             if df_p5_sc.empty:
                 st.info("No hay productos sin canje pendientes de cierre.")
@@ -803,7 +803,7 @@ def render_ui(user_info: dict):
     # --- ALERTAS, CARGA MASIVA Y ADMIN ---
     elif tab_seleccionada == "🚨 2. Gestión Anexo II":
         st.markdown("## 🚨 Paso 2 — Anexo II (Alertas Sanitarias)")
-        df_alertas = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, proveedor AS 'Proveedor Asignado', estado_global AS Estado, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 2", conn)
+        df_alertas = pd.read_sql_query("""SELECT id AS "ID", alerta_numero AS "N° Alerta", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", proveedor AS "Proveedor Asignado", estado_global AS "Estado", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 2""", conn)
         if df_alertas.empty: st.info("No hay Alertas Sanitarias pendientes de Anexo II.")
         else:
             df_alertas["Nivel Alerta"] = df_alertas.apply(lambda row: calcular_semaforo_vencimiento(row["Vencimiento"], row["Motivo"]), axis=1)
@@ -849,7 +849,7 @@ def render_ui(user_info: dict):
         tab_p3a_nuevo, tab_p3a_seg = st.tabs(["➕ Asignar Bulto a Alerta", "🔄 Seguimiento de Alertas Físicas"])
         
         with tab_p3a_nuevo:
-            df_p3a = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, proveedor AS Proveedor, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 3 AND estado_global != 'Concluido'", conn)
+            df_p3a = pd.read_sql_query("""SELECT id AS "ID", alerta_numero AS "N° Alerta", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", proveedor AS "Proveedor", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual = 3 AND estado_global != 'Concluido'""", conn)
             
             if df_p3a.empty: 
                 st.info("No hay alertas pendientes de asignación de bulto.")
@@ -887,7 +887,7 @@ def render_ui(user_info: dict):
                         st.info("🔒 **Modo de solo lectura:** Solo Bodega puede ubicar y finalizar los bultos de Alertas Sanitarias.")
 
         with tab_p3a_seg:
-            df_seg = pd.read_sql_query("SELECT id AS ID, alerta_numero AS 'N° Alerta', codigo_reyimen AS Código, descripcion AS Descripción, cantidad AS Cant, lote AS Lote, ubicacion_fisica AS Física, numero_bulto AS Bulto, vencimiento AS Vencimiento, motivo_informe AS Motivo FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual >= 3 AND ubicacion_fisica != '' AND estado_global = 'Concluido'", conn)
+            df_seg = pd.read_sql_query("""SELECT id AS "ID", alerta_numero AS "N° Alerta", codigo_reyimen AS "Código", descripcion AS "Descripción", cantidad AS "Cant", lote AS "Lote", ubicacion_fisica AS "Física", numero_bulto AS "Bulto", vencimiento AS "Vencimiento", motivo_informe AS "Motivo" FROM productos WHERE motivo_informe = 'Alerta Sanitaria' AND paso_actual >= 3 AND ubicacion_fisica != '' AND estado_global = 'Concluido'""", conn)
             
             if df_seg.empty: 
                 st.info("No hay bultos de alertas para seguimiento.")
@@ -973,7 +973,7 @@ def render_ui(user_info: dict):
             
     elif tab_seleccionada == "🔍 Consolidado General":
         st.markdown("## 🔍 Consolidado General")
-        df_cons = pd.read_sql_query("SELECT id AS ID, codigo_reyimen AS Código, descripcion AS Descripción, bodega_origen AS Bodega, cantidad AS Cant, lote AS Lote, vencimiento AS Venc, motivo_informe AS Motivo, estado_global AS Estado, proveedor AS Proveedor FROM productos", conn)
+        df_cons = pd.read_sql_query("""SELECT id AS "ID", codigo_reyimen AS "Código", descripcion AS "Descripción", bodega_origen AS "Bodega", cantidad AS "Cant", lote AS "Lote", vencimiento AS "Venc", motivo_informe AS "Motivo", estado_global AS "Estado", proveedor AS "Proveedor" FROM productos""", conn)
         
         df_cons["Nivel Alerta"] = df_cons.apply(lambda row: calcular_semaforo_vencimiento(row["Venc"], row["Motivo"]), axis=1)
         df_cons["Venc"] = pd.to_datetime(df_cons["Venc"], errors='coerce').dt.strftime('%d/%m/%Y')
