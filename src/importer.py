@@ -1,97 +1,67 @@
-"""
-Módulo para la importación masiva de productos desde archivos Excel (.xlsx, .xls) o CSV.
-"""
 import pandas as pd
-from datetime import datetime
 from src.database import get_connection
 
-def procesar_carga_masiva(file_uploaded, usuario_registro: str):
+def procesar_carga_masiva(file, usuario_registro):
     try:
-        filename = file_uploaded.name.lower()
-        if filename.endswith('.csv'):
-            df = pd.read_csv(file_uploaded)
+        # Leer el archivo dependiendo de su extensión
+        if file.name.endswith('.csv'):
+            df = pd.read_csv(file)
         else:
-            df = pd.read_excel(file_uploaded)
-
-        if df.empty:
-            return False, "El archivo subido se encuentra vacío."
-
-        # Normalizar nombres de columnas (eliminar espacios y pasar a mayúsculas)
-        df.columns = [str(col).strip().upper() for col in df.columns]
-
-        # Mapeo flexible de encabezados
-        mapeo_columnas = {
-            'BODEGA ORIGEN': 'bodega_origen',
-            'BODEGA': 'bodega_origen',
-            'TIPO PRODUCTO': 'tipo_producto',
-            'TIPO': 'tipo_producto',
-            'CÓDIGO REYIMEN': 'codigo_reyimen',
-            'CODIGO REYIMEN': 'codigo_reyimen',
-            'CODIGO': 'codigo_reyimen',
-            'DESCRIPCIÓN': 'descripcion',
-            'DESCRIPCION': 'descripcion',
-            'TIPO COMPRA': 'tipo_documento',
-            'TIPO DE COMPRA': 'tipo_documento',
-            'UNIDAD': 'unidad',
-            'CANTIDAD': 'cantidad',
-            'CANT': 'cantidad',
-            'MOTIVO INFORME': 'motivo_informe',
-            'MOTIVO': 'motivo_informe',
-            'FECHA VENCIMIENTO': 'vencimiento',
-            'VENCIMIENTO': 'vencimiento',
-            'LOTE': 'lote'
-        }
-
-        df.rename(columns=mapeo_columnas, inplace=True)
-
-        cols_requeridas = ['codigo_reyimen', 'descripcion', 'lote', 'vencimiento']
-        for col in cols_requeridas:
-            if col not in df.columns:
-                return False, f"Falta la columna obligatoria '{col.upper()}' en el archivo."
+            df = pd.read_excel(file)
 
         conn = get_connection()
         cursor = conn.cursor()
-        ingresados = 0
+        count = 0
 
-        for _, row in df.iterrows():
-            bodega = str(row.get('bodega_origen', 'Bodega AZ09 (Fármacos)')).strip()
-            tipo_prod = str(row.get('tipo_producto', 'Fármaco')).strip()
-            codigo = str(row.get('codigo_reyimen', '')).strip()
-            descripcion = str(row.get('descripcion', '')).strip()
-            tipo_compra = str(row.get('tipo_documento', 'CENABAST')).strip()
-            unidad = str(row.get('unidad', 'UNIDAD')).strip()
-            
-            try:
-                cantidad = float(row.get('cantidad', 0))
-            except ValueError:
-                cantidad = 0.0
+        for index, row in df.iterrows():
+            # Extraer datos de las columnas asegurando que sean texto o números válidos
+            bodega = str(row.get('BODEGA ORIGEN', '')).strip()
+            tipo_prod = str(row.get('TIPO PRODUCTO', '')).strip()
+            codigo = str(row.get('CÓDIGO REYIMEN', '')).strip()
+            desc = str(row.get('DESCRIPCIÓN', '')).strip()
+            compra = str(row.get('TIPO COMPRA', '')).strip()
+            unidad = str(row.get('UNIDAD', '')).strip()
+            cant = row.get('CANTIDAD', 0)
+            venc = row.get('FECHA VENCIMIENTO', '')
+            lote = str(row.get('LOTE', '')).strip()
 
-            motivo = str(row.get('motivo_informe', 'Gestión pronto vencimiento')).strip()
-            lote = str(row.get('lote', '')).strip()
+            # Evitar procesar filas que estén completamente en blanco
+            if not codigo or codigo == 'nan':
+                continue
 
-            venc_raw = row.get('vencimiento', '')
-            if isinstance(venc_raw, datetime) or isinstance(venc_raw, pd.Timestamp):
-                vencimiento = venc_raw.strftime('%Y-%m-%d')
+            # Blindaje para cantidades vacías
+            if pd.isna(cant) or str(cant).strip() == '':
+                cant = 0.0
             else:
-                vencimiento = str(venc_raw).strip()[:10]
+                cant = float(cant)
+            
+            # Blindaje y conversión de fecha para que la BD pueda calcular el semáforo (YYYY-MM-DD)
+            if pd.isna(venc) or str(venc).strip() == '':
+                venc_str = ''
+            else:
+                try:
+                    # Convierte desde DD/MM/YYYY del Excel al formato interno de la BD
+                    venc_str = pd.to_datetime(venc, dayfirst=True).strftime('%Y-%m-%d')
+                except:
+                    venc_str = str(venc).strip()[:10]
 
-            if codigo and descripcion and lote:
-                cursor.execute("""
+            # Inyección en PostgreSQL usando %s (El nuevo idioma de la nube)
+            cursor.execute("""
                 INSERT INTO productos (
                     bodega_origen, tipo_producto, codigo_reyimen, descripcion, 
-                    unidad, cantidad, vencimiento, lote, motivo_informe, 
-                    tipo_documento, usuario_registro, paso_actual
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, vencimiento, lote, motivo, tipo_compra, usuario_registro))
-                ingresados += 1
+                    tipo_documento, unidad, cantidad, vencimiento, lote, 
+                    motivo_informe, usuario_registro, paso_actual, estado_global
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                bodega, tipo_prod, codigo, desc, compra, unidad, cant, 
+                venc_str, lote, 'Gestión pronto vencimiento', 
+                usuario_registro, 2, 'En trámite'
+            ))
+            count += 1
 
         conn.commit()
         conn.close()
-
-        if ingresados > 0:
-            return True, f"¡Éxito! Se ingresaron {ingresados} productos correctamente al Paso 1."
-        else:
-            return False, "No se pudo ingresar ningún registro válido. Verifique los campos obligatorios."
-
+        return True, f"✅ Carga masiva exitosa: {count} productos ingresados directamente al Paso 2."
+        
     except Exception as e:
-        return False, f"Error al procesar el archivo: {str(e)}"
+        return False, f"Error al procesar el archivo: {e}"
