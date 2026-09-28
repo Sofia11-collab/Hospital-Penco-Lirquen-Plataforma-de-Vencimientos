@@ -328,15 +328,20 @@ def render_ui(user_info: dict):
                         if not codigo or not descripcion or not lote or (es_modulo_alerta and not alerta_numero):
                             st.error("Complete todos los campos obligatorios (*)")
                         else:
-                            conn.cursor().execute("SELECT id FROM productos WHERE codigo_reyimen=%s AND lote=%s AND bodega_origen=%s AND estado_global IN ('En trámite', 'CUARENTENA')", (codigo, lote, bodega))
-                            if conn.cursor().fetchone(): st.warning("⚠️ Este producto ya fue ingresado y está activo.")
+                            # CORRECCIÓN DE LA LÍNEA 332:
+                            cursor_verificacion = conn.cursor()
+                            cursor_verificacion.execute("SELECT id FROM productos WHERE codigo_reyimen=%s AND lote=%s AND bodega_origen=%s AND estado_global IN ('En trámite', 'CUARENTENA')", (codigo, lote, bodega))
+                            
+                            if cursor_verificacion.fetchone(): 
+                                st.warning("⚠️ Este producto ya fue ingresado y está activo.")
                             else:
                                 estado_inicial = 'CUARENTENA' if es_modulo_alerta else 'En trámite'
                                 ub_fisica = "Bodega de Excluidos" if es_modulo_alerta else ""
                                 bulto = ""
                                 a_num = alerta_numero if es_modulo_alerta else ""
                                 a_fec = str(alerta_fecha) if es_modulo_alerta else ""
-                                conn.cursor().execute("""
+                                cursor_insert = conn.cursor()
+                                cursor_insert.execute("""
                                 INSERT INTO productos (bodega_origen, tipo_producto, codigo_reyimen, descripcion, unidad, cantidad, vencimiento, lote, motivo_informe, tipo_documento, usuario_registro, paso_actual, estado_global, ubicacion_fisica, numero_bulto, alerta_numero, alerta_fecha)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                 """, (bodega, tipo_prod, codigo, descripcion, unidad, cantidad, str(vencimiento), lote, motivo, tipo_compra, user_info['usuario'], 2, estado_inicial, ub_fisica, bulto, a_num, a_fec))
